@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>物件を探す｜中古住宅×リノベーション RENOEL（リノエル）</title>
+<meta name="description" content="佐久市・小諸市・御代田町・軽井沢町・上田市・東御市・佐久穂町の中古戸建て・中古マンション・土地・新築・事業用物件を、エリア・価格・間取り・学区・こだわり条件から検索できます。">
+<meta name="robots" content="noindex">
+<link rel="icon" href="https://usedrenovation.ooi-kensetsu.co.jp/wp-content/themes/base/images/common/top/top-logoB.svg">
+<link rel="preconnect" href="https://usedrenovation.ooi-kensetsu.co.jp">
+<link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body class="page">
+
+<!-- ======================================================================
+     HEADER
+====================================================================== -->
+<header class="header" id="header">
+  <div class="header__inner">
+    <p class="header__logo">
+      <a href="./" aria-label="RENOEL トップページ">
+        <img src="https://usedrenovation.ooi-kensetsu.co.jp/wp-content/themes/base/images/common/top/top-logoB.svg" alt="大井建設工業株式会社 RENOEL（リノエル）">
+      </a>
+    </p>
+
+    <nav class="header__gnav" aria-label="グローバルナビゲーション">
+      <ul>
+        <li><a href="search.html" aria-current="page">物件を探す</a></li>
+        <li><a href="https://usedrenovation.ooi-kensetsu.co.jp/sell/">物件を売る</a></li>
+        <li><a href="./#renovation">リノベーション事例</a></li>
+        <li><a href="./#simulation">資金計画</a></li>
+        <li><a href="./#voice">お客様の声</a></li>
+        <li><a href="./#company">会社案内</a></li>
+      </ul>
+    </nav>
+
+    <div class="header__util">
+      <a class="btnMini btnMini--accent" href="./#member">無料会員登録</a>
+      <a class="btnMini" href="./#member">ログイン</a>
+      <a class="btnMini btnMini--navy" href="./#showroom">来店予約</a>
+    </div>
+
+    <button class="drawerBtn" id="drawerBtn" aria-label="メニューを開く" aria-expanded="false" aria-controls="drawer">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</header>
+
+<!-- ======================================================================
+     DRAWER（SP）
+====================================================================== -->
+<div class="drawer" id="drawer">
+  <nav aria-label="メニュー">
+    <ul class="drawer__list">
+      <li><a href="search.html">物件を探す</a></li>
+      <li><a href="https://usedrenovation.ooi-kensetsu.co.jp/sell/">物件を売る</a></li>
+      <li><a href="./#newarrival">新着物件</a></li>
+      <li><a href="./#membership">会員登録のメリット</a></li>
+      <li><a href="./#simulation">資金計画</a></li>
+      <li><a href="./#renovation">リノベーション事例</a></li>
+      <li><a href="./#voice">お客様の声</a></li>
+      <li><a href="./#news">お知らせ・ブログ</a></li>
+      <li><a href="./#company">会社案内</a></li>
+    </ul>
+
+    <div class="drawer__cta">
+      <a class="btn btn--accent" href="./#member">無料会員登録</a>
+      <a class="btn btn--light" href="./#showroom">来店予約</a>
+    </div>
+
+    <div class="drawer__info">
+      <a class="drawer__tel" href="tel:0120556119">0120-556-119</a>
+      <p>リノベーションスタジオ RENOEL<br>10:00〜18:00（定休日：火曜・祝日）</p>
+    </div>
+  </nav>
+</div>
+
+<main>
+
+<!-- ======================================================================
+     PAGE HEAD
+====================================================================== -->
+<div class="pageHead">
+  <div class="pageHead__bg" style="background-image:url('https://usedrenovation.ooi-kensetsu.co.jp/wp-content/themes/base/images/common/kasousozai/living_2.jpg')"></div>
+  <div class="container container--wide pageHead__inner">
+    <nav class="breadcrumb" aria-label="パンくずリスト">
+      <ol>
+        <li><a href="./">ホーム</a></li>
+        <li aria-current="page">物件を探す</li>
+      </ol>
+    </nav>
+    <h1 class="pageHead__ttl">
+      <span class="pageHead__main">物件を探す</span>
+    </h1>
+  </div>
+</div>
+
+<!-- ======================================================================
+     SEARCH BOX
+====================================================================== -->
+<section class="sec sec--tight" id="search">
+  <div class="container container--wide">
+    <p class="secLead">
+      施工エリア7市町村の中古戸建て・中古マンション・土地・新築・事業用物件を検索できます。<br>
+      条件を選ぶと該当件数がその場で更新されます。
+    </p>
+
+    <div class="searchBox">
+      <div class="searchBox__tabs" role="tablist">
+        <button type="button" class="is-active" role="tab" aria-selected="true" data-type="kodate" data-count="151">中古戸建て</button>
+        <button type="button" role="tab" aria-selected="false" data-type="mansion" data-count="38">中古マンション</button>
+        <button type="button" role="tab" aria-selected="false" data-type="tochi" data-count="64">土地</button>
+        <button type="button" role="tab" aria-selected="false" data-type="new" data-count="27">新築</button>
+        <button type="button" role="tab" aria-selected="false" data-type="jigyo" data-count="9">事業用</button>
+      </div>
+
+      <form class="searchBox__body" action="#" onsubmit="return false;">
+        <div class="searchRow">
+          <p class="searchRow__lb">エリア<span class="req">必須</span></p>
+          <div class="searchRow__ctl">
+            <label class="chk"><input type="checkbox" name="city" value="佐久市" data-n="42" checked>佐久市<em>42</em></label>
+            <label class="chk"><input type="checkbox" name="city" value="小諸市" data-n="28">小諸市<em>28</em></label>
+            <label class="chk"><input type="checkbox" name="city" value="御代田町" data-n="11">御代田町<em>11</em></label>
+            <label class="chk"><input type="checkbox" name="city" value="軽井沢町" data-n="19">軽井沢町<em>19</em></label>
+            <label class="chk"><input type="checkbox" name="city" value="上田市" data-n="35">上田市<em>35</em></label>
+            <label class="chk"><input type="checkbox" name="city" value="東御市" data-n="9">東御市<em>9</em></label>
+            <label class="chk"><input type="checkbox" name="city" value="佐久穂町" data-n="7">佐久穂町<em>7</em></label>
+          </div>
+        </div>
+
+        <div class="searchRow">
+          <p class="searchRow__lb">価格</p>
+          <div class="searchRow__ctl">
+            <span class="sel"><select name="pmin">
+              <option value="">下限なし</option><option>500万円</option><option>1,000万円</option><option>1,500万円</option><option>2,000万円</option>
+            </select></span>
+            <span class="tilde">〜</span>
+            <span class="sel"><select name="pmax">
+              <option value="">上限なし</option><option>1,000万円</option><option>1,500万円</option><option>2,000万円</option><option>3,000万円</option>
+            </select></span>
+          </div>
+        </div>
+
+        <div class="searchRow">
+          <p class="searchRow__lb">間取り</p>
+          <div class="searchRow__ctl">
+            <label class="chk"><input type="checkbox">2LDK以上</label>
+            <label class="chk"><input type="checkbox" checked>3LDK以上</label>
+            <label class="chk"><input type="checkbox">4LDK以上</label>
+            <label class="chk"><input type="checkbox">5LDK以上</label>
+          </div>
+        </div>
+
+        <div class="searchRow" id="school">
+          <p class="searchRow__lb">学区で探す</p>
+          <div class="searchRow__ctl">
+            <span class="sel"><select name="elementary">
+              <option value="">小学校区を選ぶ</option>
+              <option>佐久市立中込小学校</option><option>佐久市立岩村田小学校</option><option>軽井沢町立軽井沢中部小学校</option>
+            </select></span>
+            <span class="sel"><select name="junior">
+              <option value="">中学校区を選ぶ</option>
+              <option>佐久市立浅間中学校</option><option>佐久市立野沢中学校</option>
+            </select></span>
+          </div>
+        </div>
+
+        <div class="searchRow">
+          <p class="searchRow__lb">こだわり条件</p>
+          <div class="searchRow__ctl">
+            <label class="chk"><input type="checkbox">リノベーションプラン付き</label>
+            <label class="chk"><input type="checkbox">耐震診断済み</label>
+            <label class="chk"><input type="checkbox">駐車2台以上</label>
+            <label class="chk"><input type="checkbox">南向き</label>
+            <label class="chk"><input type="checkbox">土地50坪以上</label>
+            <label class="chk"><input type="checkbox">ペット可</label>
+          </div>
+        </div>
+
+        <div class="searchBox__foot">
+          <p class="searchBox__result">現在の条件で <strong id="searchCount">42</strong> 件</p>
+          <button type="submit" class="btn btn--navy">この条件で物件を見る</button>
+        </div>
+      </form>
+    </div>
+
+    <p class="sampleNote">※件数はデザイン確認用のサンプルデータです。実装時は物件データベースと連携します。</p>
+  </div>
+</section>
+
+<!-- ======================================================================
+     RESULT（プレビュー）
+====================================================================== -->
+<section class="sec sec--gray" id="result">
+  <div class="container container--wide">
+    <h2 class="secTtl">
+      <span class="secTtl__main">検索結果</span>
+    </h2>
+    <p class="secLead">物件一覧の表示イメージです。実装時は検索条件に応じた一覧がここに入ります。</p>
+
+    <div class="propGrid">
+
+      <a class="propCard" href="#">
+        <figure class="propCard__fig">
+          <img src="https://usedrenovation.ooi-kensetsu.co.jp/wp-content/uploads/2023/03/saku-lqh-after01.jpg" alt="佐久市中込の中古戸建て" loading="lazy">
+          <span class="badge badge--new">NEW</span>
+        </figure>
+        <div class="propCard__body">
+          <p class="propCard__cat">中古戸建て／佐久市</p>
+          <h3 class="propCard__ttl">佐久市中込　4LDK　南面採光の平屋</h3>
+          <p class="propCard__price"><strong>1,380</strong>万円</p>
+          <p class="propCard__loan">リノベ込み月々 <b>78,473</b> 円<br>
+            <small>（物件1,380万円＋リノベ1,518万円／金利0.75%・35年）</small></p>
+          <dl class="propCard__spec">
+            <div><dt>間取り</dt><dd>4LDK</dd></div>
+            <div><dt>土地/建物</dt><dd>198.4㎡ / 105.6㎡</dd></div>
+            <div><dt>築年月</dt><dd>1996年5月</dd></div>
+            <div><dt>最寄り</dt><dd>JR中込駅 徒歩12分</dd></div>
+          </dl>
+        </div>
+      </a>
+
+      <a class="propCard" href="#">
+        <figure class="propCard__fig">
+          <img src="https://usedrenovation.ooi-kensetsu.co.jp/wp-content/uploads/2023/03/miyota-lqh-thm.jpg" alt="御代田町馬瀬口の中古戸建て" loading="lazy">
+          <span class="badge badge--new">NEW</span>
+          <span class="badge badge--down">価格変更</span>
+        </figure>
+        <div class="propCard__body">
+          <p class="propCard__cat">中古戸建て／御代田町</p>
+          <h3 class="propCard__ttl">御代田町馬瀬口　5LDK　浅間山を望む高台</h3>
+          <p class="propCard__price"><strong>1,780</strong>万円<del>1,980万円</del></p>
+          <p class="propCard__loan">リノベ込み月々 <b>89,650</b> 円<br>
+            <small>（物件1,780万円＋リノベ1,480万円／金利0.75%・35年）</small></p>
+          <dl class="propCard__spec">
+            <div><dt>間取り</dt><dd>5LDK</dd></div>
+            <div><dt>土地/建物</dt><dd>264.0㎡ / 128.2㎡</dd></div>
+            <div><dt>築年月</dt><dd>1989年11月</dd></div>
+            <div><dt>最寄り</dt><dd>しなの鉄道 御代田駅 車6分</dd></div>
+          </dl>
+        </div>
+      </a>
+
+      <a class="propCard is-locked" href="./#member">
+        <figure class="propCard__fig">
+          <img src="https://usedrenovation.ooi-kensetsu.co.jp/wp-content/uploads/2022/11/t_thm.jpg" alt="軽井沢町の中古戸建て（会員限定）" loading="lazy">
+          <span class="badge badge--member">会員限定</span>
+          <span class="propCard__mask"><span>会員限定公開</span></span>
+        </figure>
+        <div class="propCard__body">
+          <p class="propCard__cat">中古戸建て／軽井沢町</p>
+          <h3 class="propCard__ttl">軽井沢町　4LDK　林間の平屋（詳細は会員限定）</h3>
+          <p class="propCard__price"><strong>2,480</strong>万円</p>
+          <dl class="propCard__spec">
+            <div><dt>所在地</dt><dd>–</dd></div>
+            <div><dt>間取り</dt><dd>4LDK</dd></div>
+            <div><dt>土地/建物</dt><dd>–</dd></div>
+            <div><dt>築年月</dt><dd>1998年（推定）</dd></div>
+          </dl>
+          <p class="propCard__note">この物件は無料会員限定で公開しています。所在地・写真・図面は会員登録後にご覧いただけます。</p>
+        </div>
+      </a>
+
+    </div>
+
+    <p class="sampleNote">※掲載中の物件情報はデザイン確認用のサンプルデータです。</p>
+    <div class="btnWrap"><a class="btn btn--accent" href="./#member-cta">無料会員登録で会員限定物件を見る</a></div>
+  </div>
+</section>
+
+</main>
+
+<!-- ======================================================================
+     FOOTER BANNER
+====================================================================== -->
+<div class="footerBnr">
+  <a href="https://usedrenovation.ooi-kensetsu.co.jp/buy-form/" id="buy">
+    <img src="https://usedrenovation.ooi-kensetsu.co.jp/wp-content/themes/base/images/common/kasousozai/living.jpg" alt="中古住宅を買いたい方へ" loading="lazy">
+    <span class="footerBnr__txt"><em>中古住宅を買いたい</em><small>購入をお考えの方へ</small></span>
+  </a>
+  <a href="https://usedrenovation.ooi-kensetsu.co.jp/sell-form/" id="sell">
+    <img src="https://usedrenovation.ooi-kensetsu.co.jp/wp-content/themes/base/images/common/kasousozai/waiting_room.jpg" alt="中古住宅を売りたい・買取をご希望の方へ" loading="lazy">
+    <span class="footerBnr__txt"><em>売りたい・無料査定</em><small>売却をお考えの方へ</small></span>
+  </a>
+</div>
+
+<!-- ======================================================================
+     FOOTER
+====================================================================== -->
+<footer class="footer" id="company">
+  <div class="container container--wide">
+    <div class="footer__top">
+      <div class="footer__brand">
+        <img src="https://usedrenovation.ooi-kensetsu.co.jp/wp-content/themes/base/images/common/top/top-logoW.png" alt="RENOEL（リノエル）／大井建設工業株式会社">
+        <p class="footer__name">リノベーションスタジオ RENOEL（リノエル）</p>
+        <address>
+          〒385-0029 長野県佐久市佐久平駅南9-1<br>
+          10:00〜18:00（定休日：火曜・祝日）
+        </address>
+        <a class="footer__tel" href="tel:0120556119">0120-556-119</a>
+        <p class="footer__corp">
+          大井建設工業株式会社<br>
+          宅地建物取引業免許：長野県知事（5）第4737号<br>
+          建設業許可：長野県知事許可（特・般-2）第12426号
+        </p>
+        <div class="footer__sns">
+          <a href="https://www.instagram.com/ooikensetsu/" target="_blank" rel="noopener" aria-label="Instagram"><img src="https://usedrenovation.ooi-kensetsu.co.jp/wp-content/themes/base/images/common/top/icon-instagramW.svg" alt=""></a>
+          <a href="https://www.facebook.com/ooikensetsu" target="_blank" rel="noopener" aria-label="Facebook"><img src="https://usedrenovation.ooi-kensetsu.co.jp/wp-content/themes/base/images/common/top/icon-facebookW.svg" alt=""></a>
+          <a href="https://www.youtube.com/channel/UCv7NoxmdR7pAZmNl1gXK2sA" target="_blank" rel="noopener" aria-label="YouTube"><img src="https://usedrenovation.ooi-kensetsu.co.jp/wp-content/themes/base/images/common/top/icon-youtubeW.svg" alt=""></a>
+        </div>
+      </div>
+
+      <nav class="footer__nav" aria-label="フッターナビゲーション">
+        <div>
+          <h3>物件を探す</h3>
+          <ul>
+            <li><a href="search.html?type=kodate">中古戸建て</a></li>
+            <li><a href="search.html?type=mansion">中古マンション</a></li>
+            <li><a href="search.html?type=tochi">土地</a></li>
+            <li><a href="search.html?type=new">新築</a></li>
+            <li><a href="search.html?type=jigyo">事業用</a></li>
+            <li><a href="./#area">エリアマップから探す</a></li>
+            <li><a href="search.html#school">学区で探す</a></li>
+          </ul>
+        </div>
+        <div>
+          <h3>会員サービス</h3>
+          <ul>
+            <li><a href="./#member">無料会員登録</a></li>
+            <li><a href="./#member">会員ログイン</a></li>
+            <li><a href="./#member-cta">希望条件の登録</a></li>
+            <li><a href="./#member-cta">お気に入り物件</a></li>
+            <li><a href="./#showroom">来店予約</a></li>
+          </ul>
+        </div>
+        <div>
+          <h3>リノベーション</h3>
+          <ul>
+            <li><a href="https://usedrenovation.ooi-kensetsu.co.jp/renovation/">リノベーション事例</a></li>
+            <li><a href="https://usedrenovation.ooi-kensetsu.co.jp/modelhouse/">モデルハウス</a></li>
+            <li><a href="https://usedrenovation.ooi-kensetsu.co.jp/renoel/">スタジオRENOEL</a></li>
+            <li><a href="./#simulation">資金計画</a></li>
+            <li><a href="./#voice">お客様の声</a></li>
+          </ul>
+        </div>
+        <div>
+          <h3>会社・その他</h3>
+          <ul>
+            <li><a href="https://usedrenovation.ooi-kensetsu.co.jp/company/">会社案内</a></li>
+            <li><a href="https://usedrenovation.ooi-kensetsu.co.jp/sell/">売却・買取</a></li>
+            <li><a href="https://usedrenovation.ooi-kensetsu.co.jp/akiya-support/">空き家管理サポート</a></li>
+            <li><a href="https://usedrenovation.ooi-kensetsu.co.jp/faq/">よくあるご質問</a></li>
+            <li><a href="https://www.ooi-kensetsu.co.jp/" target="_blank" rel="noopener">採用情報</a></li>
+            <li><a href="https://usedrenovation.ooi-kensetsu.co.jp/privacy_policy/">プライバシーポリシー</a></li>
+            <li><a href="#">サイトマップ</a></li>
+          </ul>
+        </div>
+      </nav>
+    </div>
+
+    <div class="footer__bottom">
+      <p class="footer__copy">&copy; 大井建設工業株式会社</p>
+      <p class="footer__note">掲載物件は情報更新予定日を過ぎたものを自動的に非公開としています。</p>
+    </div>
+  </div>
+</footer>
+
+<!-- SP 固定CTA -->
+<nav class="spCta" aria-label="お問い合わせ">
+  <a href="tel:0120556119">電話する</a>
+  <a href="./#area">地図から探す</a>
+  <a class="is-member" href="./#member">無料会員登録</a>
+</nav>
+
+<a href="#header" id="pagetop" aria-label="ページ上部へ戻る">▲</a>
+
+<script src="assets/js/main.js" defer></script>
+</body>
+</html>

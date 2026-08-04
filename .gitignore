@@ -1,0 +1,13 @@
+# OS が生成するファイル
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+desktop.ini
+$RECYCLE.BIN/
+.DS_Store
+
+# エディタ
+.vscode/
+.idea/
+*.swp
+*~
