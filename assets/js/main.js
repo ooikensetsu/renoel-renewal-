@@ -230,7 +230,113 @@
   })();
 
   /* ------------------------------------------------------------------
-     5. スクロールフェードイン
+     5. パスワードの表示／非表示（member.html の登録フォーム）
+  ------------------------------------------------------------------ */
+  (function passwordToggle() {
+    var btns = $$('.pwToggle');
+    if (!btns.length) return;
+
+    btns.forEach(function (btn) {
+      var input = document.getElementById(btn.dataset.target);
+      if (!input) return;
+
+      btn.addEventListener('click', function () {
+        var show = (input.type === 'password');
+        input.type = show ? 'text' : 'password';
+        btn.textContent = show ? '非表示' : '表示';
+        btn.setAttribute('aria-pressed', String(show));
+      });
+    });
+  })();
+
+  /* ------------------------------------------------------------------
+     6. 会員登録フォーム（STEP1〜4の切替・確認画面への反映）
+  ------------------------------------------------------------------ */
+  (function memberRegister() {
+    var panels = $$('.formStep');
+    var steps  = $$('#stepBar li');
+    var form1  = $('#formStep1');
+    var form2  = $('#formStep2');
+    if (!panels.length || !form1 || !form2) return;
+
+    function goStep(n) {
+      panels.forEach(function (p) { p.classList.toggle('is-active', +p.dataset.step === n); });
+      steps.forEach(function (li) {
+        var s = +li.dataset.step;
+        li.classList.toggle('is-current', s === n);
+        li.classList.toggle('is-done', s < n);
+      });
+      var target = $('#register');
+      if (target) {
+        var top = target.getBoundingClientRect().top + window.pageYOffset - 90;
+        window.scrollTo({ top: top, behavior: 'smooth' });
+      }
+    }
+
+    /* 入力欄の一致チェック（メール確認／パスワード確認） */
+    function matchCheck(a, b, msg) {
+      function check() { b.setCustomValidity(b.value !== '' && b.value !== a.value ? msg : ''); }
+      a.addEventListener('input', check);
+      b.addEventListener('input', check);
+    }
+    matchCheck($('#email1'), $('#email2'), 'メールアドレスが一致しません');
+    matchCheck($('#pw1'), $('#pw2'), 'パスワードが一致しません');
+
+    function checkedVals(name) {
+      var vals = $$('input[name="' + name + '"]:checked').map(function (i) { return i.value; });
+      return vals.length ? vals.join('、') : '指定なし';
+    }
+
+    function fillConfirm() {
+      var val = function (id) { var el = document.getElementById(id); return el ? el.value.trim() : ''; };
+      var setText = function (id, text) { var el = document.getElementById(id); if (el) el.textContent = text; };
+      var contact = $('input[name="contact"]:checked');
+
+      setText('cfName', (val('lastName') + ' ' + val('firstName')).trim() || '未入力');
+      setText('cfKana', (val('kanaSei') + ' ' + val('kanaMei')).trim() || '未入力');
+      setText('cfEmail', val('email1') || '未入力');
+      setText('cfTel', val('tel') || '未入力');
+      setText('cfContact', contact ? contact.value : '指定なし');
+      setText('cfNotify', checkedVals('notify'));
+
+      setText('cfType', checkedVals('wantType'));
+      setText('cfCity', checkedVals('wantCity'));
+      var pmin = val('wantPmin'), pmax = val('wantPmax');
+      setText('cfPrice', (pmin || pmax) ? ((pmin || '下限なし') + ' 〜 ' + (pmax || '上限なし')) : '指定なし');
+      setText('cfMadori', checkedVals('wantMadori'));
+      setText('cfCondition', checkedVals('wantCondition'));
+      setText('cfTiming', val('wantTiming') || '指定なし');
+
+      var doneEmail = $('#doneEmail');
+      if (doneEmail && val('email1')) doneEmail.textContent = val('email1');
+    }
+
+    form1.addEventListener('submit', function (e) {
+      e.preventDefault();
+      goStep(2);
+    });
+
+    form2.addEventListener('submit', function (e) {
+      e.preventDefault();
+      fillConfirm();
+      goStep(3);
+    });
+
+    var submitBtn = $('#submitRegister');
+    if (submitBtn) {
+      submitBtn.addEventListener('click', function () { goStep(4); });
+    }
+
+    $$('.js-back').forEach(function (a) {
+      a.addEventListener('click', function (e) {
+        e.preventDefault();
+        goStep(+a.dataset.to);
+      });
+    });
+  })();
+
+  /* ------------------------------------------------------------------
+     7. スクロールフェードイン
   ------------------------------------------------------------------ */
   (function fadeIn() {
     var sel = '.secTtl, .secLead, .propCard, .levelCard, .caseCard, .shopSolo, ' +
@@ -257,7 +363,7 @@
   })();
 
   /* ------------------------------------------------------------------
-     6. ページトップ / Cookie バー
+     8. ページトップ / Cookie バー
   ------------------------------------------------------------------ */
   (function fixedParts() {
     var top = $('#pagetop');
