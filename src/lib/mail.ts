@@ -15,7 +15,7 @@
  */
 
 import prisma from "@/lib/prisma";
-import { MAIL_ADMIN_ADDRESS } from "@/config/company";
+import { MAIL_ADMIN_ADDRESS, MAIL_FROM } from "@/config/company";
 import { isMailSendingEnabled } from "@/lib/killSwitch";
 import {
   MAIL_KIND,
@@ -112,6 +112,19 @@ async function deliver(kind: MailKind, payload: MailPayload): Promise<MailResult
   // O-05：停止スイッチ。事故時にコードを直さず送信を止められるようにしてある。
   if (!(await isMailSendingEnabled())) {
     return skip(kind, payload, "停止スイッチが入っているため送信しませんでした");
+  }
+
+  // 差出人が create 時のプレースホルダ（例: noreply@renoel.example.com）のまま本番に
+  // 出ていると、送っても受信者に届かず、なりすまし判定もされる。送らずに記録する。
+  if (
+    process.env.NODE_ENV === "production" &&
+    /(^|\.)example\.(com|org|net|invalid)$/i.test(MAIL_FROM.address.split("@")[1] ?? "")
+  ) {
+    return fail(
+      kind,
+      payload,
+      "MAIL_FROM_ADDRESS が未設定（example ドメインのプレースホルダのまま）です"
+    );
   }
 
   const apiKey = (process.env.RESEND_API_KEY || "").trim();

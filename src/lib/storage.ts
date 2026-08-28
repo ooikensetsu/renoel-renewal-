@@ -10,7 +10,7 @@
  * NEXT_PUBLIC_ を付けないこと。付けるとブラウザに配信され、DBを全操作できる鍵が漏れる。
  */
 
-import { STORAGE_BUCKET, CONTENT_TYPES } from "@/config/images";
+import { STORAGE_BUCKET, CONTENT_TYPES, SIGNED_URL_TTL_SECONDS } from "@/config/images";
 
 function config() {
   const url = (process.env.SUPABASE_URL || "").trim().replace(/\/+$/, "");
@@ -68,14 +68,25 @@ export function isStorageConfigured(): boolean {
   return url !== "" && key !== "";
 }
 
-/** 公開URL。バケットを public にしてある前提。 */
+/**
+ * 過去の公開URL形式。S-07 でバケットを非公開にしたため新規には使わないが、
+ * すでにこの形式で保存済みの PropertyImage.path を解釈するために残す。
+ */
 export function publicUrl(path: string): string {
   const { url } = config();
   return `${url}/storage/v1/object/public/${STORAGE_BUCKET}/${path}`;
 }
 
+/**
+ * DBの PropertyImage.path から Storage 上のパス（例: 6991580385/001.jpg）を得る。
+ * 新しい行はパスをそのまま持つ。過去の行は公開URLを丸ごと持っているので変換する。
+ */
+export function toStoragePath(stored: string): string {
+  return pathFromPublicUrl(stored) ?? stored.replace(/^\/+/, "");
+}
+
 export type StorageResult =
-  | { ok: true; url: string }
+  | { ok: true }
   | { ok: false; reason: string };
 
 /**
@@ -115,7 +126,7 @@ export async function uploadImage(path: string, file: File, ext: string): Promis
       };
     }
 
-    return { ok: true, url: publicUrl(path) };
+    return { ok: true };
   } catch (error) {
     return { ok: false, reason: `保管先へ接続できませんでした（${describeError(error)}）` };
   }
@@ -140,18 +151,86 @@ export async function deleteImage(path: string): Promise<StorageResult> {
     if (!res.ok) {
       return { ok: false, reason: `削除できませんでした（HTTP ${res.status}）` };
     }
-    return { ok: true, url: "" };
+    return { ok: true };
   } catch (error) {
     return { ok: false, reason: `保管先へ接続できませんでした（${describeError(error)}）` };
   }
 }
 
-/** 公開URLから Storage 上のパスを取り出す。削除のときに使う。 */
+/** 過去の公開URLから Storage 上のパスを取り出す。toStoragePath 経由で使う。 */
 export function pathFromPublicUrl(fileUrl: string): string | null {
   const marker = `/storage/v1/object/public/${STORAGE_BUCKET}/`;
   const i = fileUrl.indexOf(marker);
   if (i === -1) return null;
   return fileUrl.slice(i + marker.length);
+}
+
+/**
+ * S-07：会員限定物件の画像が URL 推測だけで見えないよう、バケットは非公開にし、
+ * 画面表示のたびに短時間だけ有効な署名付きURLを作る。
+ *
+ * 入力の各要素（PropertyImage.path）をキーに、表示用URLを値に持つ Map を返す。
+ * 署名に失敗したものはキーごと結果に含めない（呼び出し側で除外できる）。
+ * 会員限定物件の秘匿判定を通したうえで渡すこと（この関数は認可を見ない）。
+ */
+export async function signedImageUrls(
+  storedPaths: string[]
+): Promise<Map<string, string>> {
+  const result = new Map<string, string>();
+  const { url, key } = config();
+  if (url === "" || key === "" || storedPaths.length === 0) return result;
+
+  // 重複を除いて1回で署名する（一覧では同じ画像が複数回並びうる）。
+  // Storage パス → DBに入っている元の値、の対応表。応答を元の値へ戻すために使う。
+  const originalByStoragePath = new Map<string, string>();
+  for (const stored of storedPaths) originalByStoragePath.set(toStoragePath(stored), stored);
+  const paths = [...originalByStoragePath.keys()];
+
+  try {
+    const res = await fetch(`${url}/storage/v1/object/sign/${STORAGE_BUCKET}`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${key}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ expiresIn: SIGNED_URL_TTL_SECONDS, paths }),
+      signal: AbortSignal.timeout(10_000),
+    });
+
+    if (!res.ok) {
+      console.error(`画像URLの署名に失敗しました（HTTP ${res.status}）`);
+      return result;
+    }
+
+    const rows = (await res.json()) as {
+      path?: string | null;
+      signedURL?: string | null;
+      error?: string | null;
+    }[];
+
+    rows.forEach((row, i) => {
+      if (!row.signedURL) return;
+      // 応答の path で元の値へ戻す。path が合わなければ入力順で対応づける
+      // （Supabase は paths と同じ順で返す）。
+      const original =
+        (row.path ? originalByStoragePath.get(row.path) : undefined) ??
+        originalByStoragePath.get(paths[i] ?? "");
+      if (original) result.set(original, `${url}/storage/v1${row.signedURL}`);
+    });
+    return result;
+  } catch (error) {
+    console.error("画像URLの署名でエラー:", describeError(error));
+    return result;
+  }
+}
+
+/**
+ * PropertyImage.path の配列を、画面に出せるURL配列へ変換する。
+ * 署名に失敗したものは落とす（壊れた <img> を出さない）。
+ */
+export async function toDisplayUrls(storedPaths: string[]): Promise<string[]> {
+  const signed = await signedImageUrls(storedPaths);
+  return storedPaths.map((p) => signed.get(p)).filter((u): u is string => !!u);
 }
 
 /**
@@ -187,13 +266,17 @@ export async function checkStorage(): Promise<{ ok: boolean; message: string }> 
     }
 
     const body = (await res.json()) as { name?: string; public?: boolean };
-    if (body.public === false) {
+    if (body.public === true) {
+      // S-07：公開バケットだと、会員限定物件の画像も直リンクで誰でも見られる。
       return {
         ok: false,
-        message: `バケット「${STORAGE_BUCKET}」は非公開です。画像を画面に表示するため Public bucket にしてください。`,
+        message: `バケット「${STORAGE_BUCKET}」が「公開」設定です。会員限定物件の画像が直リンクで閲覧できてしまうため、Supabase の Storage で Public を無効（非公開）にしてください。画像は署名付きURLで配信します。`,
       };
     }
-    return { ok: true, message: `バケット「${body.name ?? STORAGE_BUCKET}」に接続できました。` };
+    return {
+      ok: true,
+      message: `バケット「${body.name ?? STORAGE_BUCKET}」（非公開）に接続できました。`,
+    };
   } catch (error) {
     return { ok: false, message: `接続できませんでした（${describeError(error)}）` };
   }

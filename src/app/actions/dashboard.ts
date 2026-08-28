@@ -4,6 +4,7 @@ import prisma from "@/lib/prisma";
 import { requireAdmin, authErrorMessage } from "@/lib/auth";
 import { reportError } from "@/lib/errors";
 import { MAIL_STATUS } from "@/lib/mail";
+import { signedImageUrls } from "@/lib/storage";
 import { ROLE, USER_STATUS, DISCLOSURE_LEVEL } from "@/config/security";
 
 /**
@@ -107,6 +108,11 @@ export async function getDashboardSummary() {
       }),
     ]);
 
+    // サムネイル（各物件の1枚目）を署名付きURLにする。S-07。
+    const signed = await signedImageUrls(
+      recentPropertiesRaw.flatMap((p) => (p.images[0] ? [p.images[0].path] : []))
+    );
+
     const data: DashboardSummary = {
       members: { total: memberTotal, active: memberActive, store: memberStore },
       properties: {
@@ -125,8 +131,7 @@ export async function getDashboardSummary() {
         title: p.title,
         priceMan: p.priceMan,
         disclosureLevel: p.disclosureLevel,
-        // PropertyImage.path には公開URLがそのまま入っている（schema.prisma のコメント参照）
-        imageUrl: p.images[0]?.path ?? null,
+        imageUrl: p.images[0] ? signed.get(p.images[0].path) ?? null : null,
         updatedAt: p.updatedAt,
       })),
     };

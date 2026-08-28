@@ -4,7 +4,8 @@ import bcrypt from "bcryptjs";
 import prisma from "@/lib/prisma";
 import { reportError } from "@/lib/errors";
 import { sendRegistrationEmail, sendRegistrationAdminNotice } from "@/lib/mail";
-import { ROLE, USER_STATUS } from "@/config/security";
+import { ROLE, USER_STATUS, BCRYPT_ROUNDS, RATE_LIMITS } from "@/config/security";
+import { checkRateLimit, clientIp } from "@/lib/rateLimit";
 
 /** S-08：外部から受け取る値の長さを制限する。 */
 const LIMITS = { name: 100, email: 254, tel: 30, zip: 10, address: 200 } as const;
@@ -48,26 +49,37 @@ export async function registerUser(formData: FormData) {
     return { success: false as const, error: "入力された文字数が上限を超えています" };
   }
 
+  // S-08：同一IPからの登録試行を絞る（総当たり・大量アカウント作成の抑止）
+  const ip = await clientIp();
+  const ipLimit = await checkRateLimit(
+    `register:ip:${ip}`,
+    RATE_LIMITS.registrationByIp.limit,
+    RATE_LIMITS.registrationByIp.windowSeconds
+  );
+  if (!ipLimit.ok) {
+    return {
+      success: false as const,
+      error: "短時間に登録の試行が続いています。しばらくおいてから再度お試しください。",
+    };
+  }
+
   try {
     const existingUser = await prisma.user.findUnique({ where: { email } });
 
     if (existingUser) {
-      // S-13 の論理削除により、退会済みでもレコードは残る（email は一意）。
-      // 復帰は本人確認が必要なため、自動では再登録させず窓口へ案内する。
-      if (existingUser.deletedAt !== null) {
-        return {
-          success: false as const,
-          error:
-            "このメールアドレスは過去に退会された会員のものです。お手数ですがお問い合わせ窓口までご連絡ください。",
-        };
-      }
+      // S-12：アカウント列挙対策。
+      // 「既に登録済み」か「過去に退会済み」かを画面で区別しない
+      //   （退会済みである、という機微な事実の開示を塞ぐ）。
+      // 完全な非開示にはメール確認フローが必要（docs/debt.md に TODO:未確認）。
+      // ここでは active / deleted を1つの文言に統合し、レート制限（上記）で補う。
       return {
         success: false as const,
-        error: "このメールアドレスは既に登録されています",
+        error:
+          "このメールアドレスはご利用いただけません。既にご登録済みの場合はログインをお試しください。ご不明な場合はお問い合わせ窓口までご連絡ください。",
       };
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const hashedPassword = await bcrypt.hash(password, BCRYPT_ROUNDS);
 
     await prisma.user.create({
       data: {

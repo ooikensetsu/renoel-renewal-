@@ -1,18 +1,29 @@
-import { getServerSession } from "next-auth/next";
 import { redirect } from "next/navigation";
 import Link from "next/link";
+import prisma from "@/lib/prisma";
 import DeleteAccountButton from "@/components/DeleteAccountButton";
+import { requireUser } from "@/lib/auth";
 import { signInPath } from "@/lib/authPaths";
 
-export default async function MyPage() {
-  const session = await getServerSession();
+// 毎回サーバー側で権限を確認する（キャッシュさせない）。
+export const dynamic = "force-dynamic";
 
-  // ログインしていない場合はトップ（またはログイン画面）へリダイレクト
-  if (!session) {
+export default async function MyPage() {
+  // S-07：他の画面と同じく requireUser() で判定する。
+  // getServerSession() の直呼びだと、停止・退会済みでも
+  // セッション有効期限（最大8時間）の間はこの画面に入れてしまう。
+  const auth = await requireUser();
+  if (!auth.ok) {
     redirect(signInPath("/mypage"));
   }
 
-  const imgBase = "https://okazaki-bot.github.io/chuko-fudousan-design/";
+  const user = await prisma.user.findFirst({
+    where: { id: auth.userId, deletedAt: null },
+    select: { name: true, email: true },
+  });
+  if (!user) {
+    redirect(signInPath("/mypage"));
+  }
 
   return (
     <>
@@ -29,7 +40,7 @@ export default async function MyPage() {
 
       <section className="sec">
         <div className="container" style={{ maxWidth: "800px" }}>
-          <p style={{ marginBottom: "32px", fontSize: "1.8rem" }}>ようこそ、{session.user?.name || "会員"}さん</p>
+          <p style={{ marginBottom: "32px", fontSize: "1.8rem" }}>ようこそ、{user.name || "会員"}さん</p>
 
           <div className="cardGrid cardGrid--2">
             {/* お気に入り物件 (モック) */}
@@ -60,11 +71,11 @@ export default async function MyPage() {
               <dl className="mediaCard__data" style={{ borderTop: "none", marginTop: 0 }}>
                 <div style={{ padding: "12px 0" }}>
                   <dt>お名前</dt>
-                  <dd>{session.user?.name}</dd>
+                  <dd>{user.name || "未設定"}</dd>
                 </div>
                 <div style={{ padding: "12px 0" }}>
                   <dt>メールアドレス</dt>
-                  <dd>{session.user?.email}</dd>
+                  <dd>{user.email}</dd>
                 </div>
               </dl>
               <div style={{ marginTop: "24px", textAlign: "center" }}>

@@ -14,6 +14,14 @@ export const MAX_FILE_BYTES = 5 * 1024 * 1024;
 /** 1物件あたりの枚数の上限。無料枠（1GB）を使い切らないための歯止め。 */
 export const MAX_IMAGES_PER_PROPERTY = 20;
 
+/**
+ * S-07：バケットは非公開にし、画像は都度この秒数だけ有効な署名付きURLで配信する。
+ * 会員限定物件の画像が、URL 推測だけで未ログインに見えてしまうのを防ぐ。
+ * 物件ページは毎回サーバーで描画される（force-dynamic）ため、閲覧のたびに新しいURLが出る。
+ * 1時間：1回の閲覧セッション中に画像が切れない程度に短く。
+ */
+export const SIGNED_URL_TTL_SECONDS = 60 * 60;
+
 /** 受け付ける拡張子。小文字で比較する。 */
 export const ALLOWED_EXTENSIONS = ["jpg", "jpeg", "png", "webp"] as const;
 

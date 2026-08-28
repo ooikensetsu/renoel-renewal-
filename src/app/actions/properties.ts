@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import prisma from "@/lib/prisma";
 import { requireAdmin, requireUser, authErrorMessage } from "@/lib/auth";
 import { reportError } from "@/lib/errors";
-import { DISCLOSURE_LEVEL } from "@/config/security";
+import { DISCLOSURE_LEVEL, isValidDisclosureLevel } from "@/config/security";
+import { signedImageUrls, toDisplayUrls } from "@/lib/storage";
 import { parseJapaneseDate } from "@/lib/dates";
 import { toJsonSafe } from "@/lib/json";
 import { blankToNull } from "@/lib/blank";
@@ -210,6 +211,15 @@ export async function getPublicProperties(cityCd?: string, limit?: number) {
       ...(Number.isInteger(limit) && (limit as number) > 0 ? { take: limit } : {}),
     });
 
+    // 表示できる物件の画像だけまとめて署名する（鍵つき物件の画像URLは作らない。S-07）。
+    const signed = await signedImageUrls(
+      properties.flatMap((p) =>
+        p.disclosureLevel === DISCLOSURE_LEVEL.MEMBERS && !isMember
+          ? []
+          : p.images.map((img) => img.path)
+      )
+    );
+
     return {
       success: true as const,
       data: properties.map((p) => {
@@ -228,7 +238,9 @@ export async function getPublicProperties(cityCd?: string, limit?: number) {
           address: locked ? null : p.address,
           landMen: locked ? null : p.landMen,
           bldMen: locked ? null : p.bldMen,
-          images: locked ? [] : p.images.map((img) => img.path),
+          images: locked
+            ? []
+            : p.images.map((img) => signed.get(img.path)).filter((u): u is string => !!u),
           isMemberOnly,
           locked,
         };
@@ -281,7 +293,7 @@ export async function getPublicPropertyById(id: number) {
         bldY: p.bldY,
         bldM: p.bldM,
         currentState: p.currentState,
-        images: p.images.map((img) => img.path),
+        images: await toDisplayUrls(p.images.map((img) => img.path)),
 
         // 物件概要。取扱店（agency*）も返す（大野の指示：管理画面と同じ情報をお客様も見られるように）。
         trafficNote: p.trafficNote,
@@ -341,6 +353,12 @@ export async function getProperties() {
       orderBy: { updatedAt: "desc" },
       include: { images: { orderBy: { sortOrder: "asc" } } },
     });
+
+    // 一覧のサムネイル（各物件の1枚目）を署名付きURLにする。S-07。
+    const signed = await signedImageUrls(
+      properties.flatMap((p) => (p.images[0] ? [p.images[0].path] : []))
+    );
+
     // objMngNo は BigInt。クライアントコンポーネントへ渡すため文字列にする。
     // あわせてエリア名を添える（画面側で対応表を持たせないため）。
     return {
@@ -349,10 +367,8 @@ export async function getProperties() {
         ...p,
         objMngNo: p.objMngNo.toString(),
         areaName: areaName(p.cityCd),
-        // 一覧のサムネイル用。以前は一覧が Unsplash の他人の写真を全物件に
-        // 同じもので出していたため、実際に登録された1枚目を渡す。
-        // PropertyImage.path には公開URLがそのまま入っている（schema.prisma 参照）。
-        imageUrl: p.images[0]?.path ?? null,
+        // 一覧のサムネイル用。実際に登録された1枚目の署名付きURL。
+        imageUrl: p.images[0] ? signed.get(p.images[0].path) ?? null : null,
         imageCount: p.images.length,
       })),
     };
@@ -503,6 +519,19 @@ export async function importProperties(
       };
     }
 
+    // 公開レベルは 0（公開）か 1（会員限定）のみ。空欄は 0（公開）。
+    // 「1 以外は公開扱い」の判定に落ちるため、2 以上を素通しさせない
+    //（会員限定のつもりが公開される事故を防ぐ。updateProperty と同じ検証）。
+    const disclosureLevel = parseInt(item.disclosureLevel ?? "") || DISCLOSURE_LEVEL.PUBLIC;
+    if (!isValidDisclosureLevel(disclosureLevel)) {
+      return {
+        success: false as const,
+        error: `公開レベルは 0（公開）か 1（会員限定）で指定してください（対象: ${objMngNo} / 値: ${
+          item.disclosureLevel ?? "空"
+        }）。`,
+      };
+    }
+
     rows.push({
       objMngNo,
       syubetu,
@@ -518,7 +547,7 @@ export async function importProperties(
       address: item.address,
       prefCd: item.prefCd?.trim() || PREF_CODE,
       cityCd,
-      disclosureLevel: parseInt(item.disclosureLevel ?? "") || 0,
+      disclosureLevel,
       currentState: text(item.currentState),
 
       trafficNote: text(item.trafficNote),
@@ -630,13 +659,14 @@ export async function getPropertyForAdmin(id: number) {
       return { success: false as const, error: "指定された物件が見つかりません。" };
     }
 
-    const [memberViews, inquiries] = await Promise.all([
+    const [memberViews, inquiries, signed] = await Promise.all([
       // logPropertyView が `物件ID: 12 (物件名)` の形で書いている。
       // 末尾の " (" まで含めて照合しないと、物件ID 1 が 12 にも当たる。
       prisma.activityLog.count({
         where: { action: "VIEW_PROPERTY", details: { startsWith: `物件ID: ${id} (` } },
       }),
       prisma.inquiry.count({ where: { propertyId: id } }),
+      signedImageUrls(property.images.map((img) => img.path)),
     ]);
 
     return {
@@ -645,6 +675,12 @@ export async function getPropertyForAdmin(id: number) {
         ...property,
         objMngNo: property.objMngNo.toString(),
         areaName: areaName(property.cityCd),
+        // 画像は署名付きURLに差し替える（path はもう Storage 上のパス）。S-07。
+        images: property.images.map((img) => ({
+          id: img.id,
+          sortOrder: img.sortOrder,
+          path: signed.get(img.path) ?? "",
+        })),
         stats: { memberViews, inquiries },
       },
     };
@@ -739,7 +775,7 @@ export async function updateProperty(id: number, formData: FormData) {
 
   const disclosureLevel = parseInt(formData.get("disclosureLevel")?.toString() ?? "");
   if (Number.isInteger(disclosureLevel)) {
-    if (disclosureLevel !== DISCLOSURE_LEVEL.PUBLIC && disclosureLevel !== DISCLOSURE_LEVEL.MEMBERS) {
+    if (!isValidDisclosureLevel(disclosureLevel)) {
       return { success: false as const, error: "公開レベルが正しくありません。" };
     }
     data.disclosureLevel = disclosureLevel;

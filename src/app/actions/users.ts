@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import prisma from "@/lib/prisma";
 import { requireAdmin, requireUser, authErrorMessage } from "@/lib/auth";
 import { reportError } from "@/lib/errors";
+import { isValidUserStatus } from "@/config/security";
 
 /**
  * S-07：ここにある関数は "use server"、つまり公開されたHTTPエンドポイントである。
@@ -84,7 +85,21 @@ export async function updateUserStatus(id: number, status: string) {
     return { success: false as const, error: authErrorMessage(auth.reason) };
   }
 
+  // 画面が送ってくる値を信用しない。想定外のステータスは書き込まない。
+  if (!isValidUserStatus(status)) {
+    return { success: false as const, error: "指定された状態は使用できません。" };
+  }
+
   try {
+    // S-13：退会済み（deletedAt あり）の会員は対象にしない。
+    const target = await prisma.user.findFirst({
+      where: { id, deletedAt: null },
+      select: { id: true },
+    });
+    if (!target) {
+      return { success: false as const, error: "会員が見つかりません。" };
+    }
+
     const user = await prisma.user.update({
       where: { id },
       data: { status },

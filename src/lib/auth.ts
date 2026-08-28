@@ -9,7 +9,15 @@ import {
   MAX_FAILED_LOGIN_ATTEMPTS,
   LOGIN_LOCK_MINUTES,
   SESSION_MAX_AGE_SECONDS,
+  BCRYPT_ROUNDS,
 } from "@/config/security";
+
+/**
+ * S-12：メールアドレスの登録有無を「応答時間の差」で推測されないための当て馬。
+ * ユーザーが見つからない場合も、これと1回 bcrypt.compare して所要時間を揃える。
+ * 起動時に1回だけ生成する（コスト計算は cold start に1回のみ）。
+ */
+const TIMING_SAFE_DUMMY_HASH = bcrypt.hashSync("timing-safe-placeholder", BCRYPT_ROUNDS);
 
 /**
  * S-01：シークレットにフォールバック値を置かない。
@@ -46,53 +54,61 @@ export const authOptions: NextAuthOptions = {
           where: { email: credentials.email },
         });
 
-        // 退会済み・停止中・パスワード未設定は認証しない。
-        // どの理由で失敗したかは呼び出し元に伝えない（アカウントの存在を推測させないため）。
-        if (
-          !user ||
-          !user.password ||
-          user.deletedAt !== null ||
-          user.status !== USER_STATUS.ACTIVE
-        ) {
+        // 退会済み・停止中・パスワード未設定は認証対象にしない。
+        const activeUser =
+          user &&
+          user.password &&
+          user.deletedAt === null &&
+          user.status === USER_STATUS.ACTIVE
+            ? user
+            : null;
+
+        // S-12：メール未登録でも必ず1回ハッシュ照合し、応答時間を揃える
+        // （タイミング差でアカウントの存在を推測させない）。
+        const isValid = await bcrypt.compare(
+          credentials.password,
+          activeUser?.password ?? TIMING_SAFE_DUMMY_HASH
+        );
+
+        // どの理由で失敗したかは呼び出し元に伝えない（存在を推測させないため）。
+        if (!activeUser) {
           return null;
         }
 
-        // S-12：ロック中は照合すらしない
-        if (user.lockedUntil && user.lockedUntil > new Date()) {
+        // S-12：ロック中は照合結果に関わらず拒否する
+        if (activeUser.lockedUntil && activeUser.lockedUntil > new Date()) {
           return null;
         }
-
-        const isValid = await bcrypt.compare(credentials.password, user.password);
 
         if (!isValid) {
           // S-12：失敗回数を数え、上限に達したら一定時間ロックする
-          const failedCount = user.failedLoginCount + 1;
+          const failedCount = activeUser.failedLoginCount + 1;
           const shouldLock = failedCount >= MAX_FAILED_LOGIN_ATTEMPTS;
           await prisma.user.update({
-            where: { id: user.id },
+            where: { id: activeUser.id },
             data: {
               failedLoginCount: shouldLock ? 0 : failedCount,
               lockedUntil: shouldLock
                 ? new Date(Date.now() + LOGIN_LOCK_MINUTES * 60 * 1000)
-                : user.lockedUntil,
+                : activeUser.lockedUntil,
             },
           });
           return null;
         }
 
         // 成功したらカウンタを戻す
-        if (user.failedLoginCount !== 0 || user.lockedUntil !== null) {
+        if (activeUser.failedLoginCount !== 0 || activeUser.lockedUntil !== null) {
           await prisma.user.update({
-            where: { id: user.id },
+            where: { id: activeUser.id },
             data: { failedLoginCount: 0, lockedUntil: null },
           });
         }
 
         return {
-          id: user.id.toString(),
-          name: user.name,
-          email: user.email,
-          role: user.role,
+          id: activeUser.id.toString(),
+          name: activeUser.name,
+          email: activeUser.email,
+          role: activeUser.role,
         };
       },
     }),

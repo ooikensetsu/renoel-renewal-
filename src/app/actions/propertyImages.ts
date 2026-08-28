@@ -8,7 +8,7 @@ import { parseImageFileName, storagePathFor } from "@/lib/imageName";
 import {
   uploadImage,
   deleteImage,
-  pathFromPublicUrl,
+  toStoragePath,
   isStorageConfigured,
   checkStorage,
 } from "@/lib/storage";
@@ -46,6 +46,7 @@ async function saveOne(
   ext: string,
   file: File
 ): Promise<{ ok: boolean; message: string }> {
+  // DBには Storage 上のパスを保存する（公開URLではない。表示時に署名付きURLを作る。S-07）。
   const path = storagePathFor(objMngNo, order, ext);
   const uploaded = await uploadImage(path, file, ext);
   if (!uploaded.ok) return { ok: false, message: uploaded.reason };
@@ -57,7 +58,7 @@ async function saveOne(
   if (existing) {
     await prisma.propertyImage.update({
       where: { id: existing.id },
-      data: { path: uploaded.url },
+      data: { path },
     });
     return { ok: true, message: `${order}枚目を差し替えました` };
   }
@@ -68,7 +69,7 @@ async function saveOne(
   }
 
   await prisma.propertyImage.create({
-    data: { propertyId, path: uploaded.url, sortOrder: order },
+    data: { propertyId, path, sortOrder: order },
   });
   return { ok: true, message: `${order}枚目として登録しました` };
 }
@@ -228,12 +229,9 @@ export async function deletePropertyImage(imageId: number) {
     await prisma.propertyImage.delete({ where: { id: imageId } });
 
     // 保管先の削除は失敗しても処理を止めない（DBからは消えており、孤児ファイルが残るだけ）
-    const path = pathFromPublicUrl(image.path);
-    if (path) {
-      const removed = await deleteImage(path);
-      if (!removed.ok) {
-        console.error(`保管先の画像を消せませんでした（image ${imageId}）: ${removed.reason}`);
-      }
+    const removed = await deleteImage(toStoragePath(image.path));
+    if (!removed.ok) {
+      console.error(`保管先の画像を消せませんでした（image ${imageId}）: ${removed.reason}`);
     }
 
     revalidatePath("/admin/properties");

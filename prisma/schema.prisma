@@ -193,6 +193,17 @@ model User {
   @@index([deletedAt])
 }
 
+/// S-08：未認証で叩ける公開フォーム（"use server"）の濫用を抑えるための計数。
+/// key ごとに time window 内の呼び出し回数を持つ。期限切れの行は次回アクセス時に上書きされる。
+/// 個人情報は key に入れない（メール等はハッシュにする。S-09）。しきい値は src/config/security.ts。
+model RateLimit {
+  key       String   @id
+  count     Int      @default(0)
+  expiresAt DateTime
+
+  @@index([expiresAt])
+}
+
 model ActivityLog {
   id        Int      @id @default(autoincrement())
   userId    Int

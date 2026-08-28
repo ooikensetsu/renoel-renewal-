@@ -5,6 +5,8 @@ import prisma from "@/lib/prisma";
 import { requireAdmin, requireUser, authErrorMessage } from "@/lib/auth";
 import { reportError } from "@/lib/errors";
 import { sendInquiryEmail, sendInquiryAdminNotice } from "@/lib/mail";
+import { RATE_LIMITS, isValidInquiryStatus } from "@/config/security";
+import { checkRateLimit, clientIp, hashForKey } from "@/lib/rateLimit";
 
 /** S-08：外部から受け取る値の長さを制限する。 */
 const LIMITS = { name: 100, email: 254, tel: 30, message: 4000 } as const;
@@ -25,9 +27,7 @@ export async function submitInquiry(formData: FormData) {
 
     const propertyIdStr = formData.get("propertyId")?.toString();
     const parsedPropertyId = propertyIdStr ? parseInt(propertyIdStr) : NaN;
-    const propertyId = Number.isInteger(parsedPropertyId) ? parsedPropertyId : null;
-    const propertyTitle =
-      formData.get("propertyTitle")?.toString()?.slice(0, LIMITS.name) || "不明な物件";
+    const requestedPropertyId = Number.isInteger(parsedPropertyId) ? parsedPropertyId : null;
 
     const name = formData.get("name")?.toString()?.trim();
     const email = formData.get("email")?.toString()?.trim();
@@ -51,18 +51,46 @@ export async function submitInquiry(formData: FormData) {
       return { success: false as const, error: "入力された文字数が上限を超えています" };
     }
 
+    // S-08：踏み台送信・連投の抑止。IP単位と「宛先メール単位」の両方で絞る。
+    const ipLimit = await checkRateLimit(
+      `inquiry:ip:${await clientIp()}`,
+      RATE_LIMITS.inquiryByIp.limit,
+      RATE_LIMITS.inquiryByIp.windowSeconds
+    );
+    if (!ipLimit.ok) {
+      return {
+        success: false as const,
+        error: "短時間に送信が続いています。しばらくおいてから再度お試しください。",
+      };
+    }
+    const recipientLimit = await checkRateLimit(
+      `inquiry:to:${hashForKey(email)}`,
+      RATE_LIMITS.inquiryByRecipient.limit,
+      RATE_LIMITS.inquiryByRecipient.windowSeconds
+    );
+    if (!recipientLimit.ok) {
+      return {
+        success: false as const,
+        error:
+          "このメールアドレス宛の送信が続いています。しばらくおいてから再度お試しください。",
+      };
+    }
+
+    // S-08：物件名はクライアントの隠しフィールドを信用せず、DBの実データを使う。
+    // 存在しない物件IDが来たら、物件の指定なしとして扱う（偽の物件名を管理者へ流さない）。
+    const property =
+      requestedPropertyId === null
+        ? null
+        : await prisma.property.findUnique({
+            where: { id: requestedPropertyId },
+            select: { title: true, objMngNo: true },
+          });
+    const propertyId = property ? requestedPropertyId : null;
+    const propertyTitle = property?.title ?? "（物件の指定なし）";
+
     const inquiry = await prisma.inquiry.create({
       data: { propertyId, userId, name, email, tel, message },
     });
-
-    // 管理者が受信箱だけで対応できるよう、通知メールにも物件管理番号を入れる。
-    const property =
-      propertyId === null || propertyId === undefined
-        ? null
-        : await prisma.property.findUnique({
-            where: { id: propertyId },
-            select: { objMngNo: true },
-          });
 
     // メール送信が失敗しても、問い合わせ自体は受け付け済みとして扱う。
     // ここで例外を投げると、保存できているのに利用者へ失敗と伝えることになる。
@@ -145,6 +173,11 @@ export async function updateInquiryStatus(id: number, status: string) {
   const auth = await requireAdmin();
   if (!auth.ok) {
     return { success: false as const, error: authErrorMessage(auth.reason) };
+  }
+
+  // 画面が送ってくる値を信用しない。想定外のステータスは書き込まない。
+  if (!isValidInquiryStatus(status)) {
+    return { success: false as const, error: "指定された対応状況は使用できません。" };
   }
 
   try {
