@@ -404,10 +404,32 @@ Chrome で全画面を操作。ヘッダー 65px・IDブロック上端 y=14（�
 
 ---
 
-## 2026-08-28 セキュリティ検品の是正 第2弾（**未リリース**）
+## 2026-08-28 セキュリティ検品の是正 第2弾（**リリース済み**）
 
-**状態：コード修正済み・機械ゲート通過・本番未適用。** 実行者欄が空のうちは本番へ出ていない。
-変更レベル **L3**（認証・個人情報の取り扱いに触れる）。指摘元は 2026-08-28 の脆弱性検品。
+| 日付 | 何を変えたか | 実行者 |
+|---|---|---|
+| 2026-08-28 | コミット `d55c33a` を main へ。Vercel 本番デプロイ（`used-housing-site` / `used-housing-site-m2yk` とも success）。`prisma migrate deploy` で `RateLimit` テーブル追加。 | Claude（大野の指示） |
+
+**本番デプロイ後の確認（2026-08-28・実URLへのリクエスト）**
+
+| 対象 | 結果 |
+|---|---|
+| GitHub deployment status（`d55c33a`） | 両 Vercel プロジェクトとも **success** |
+| `/` `/properties` `/property/1` `/property/1/contact` | いずれも 200 |
+| レスポンスヘッダ（`/`） | `x-frame-options: DENY` / `content-security-policy: frame-ancestors 'none'…` / `strict-transport-security` / `x-content-type-options: nosniff` / `referrer-policy` / `permissions-policy` すべて付与を確認 |
+| `/admin` `/mypage` `/mypage/edit` | いずれも 307 → `/api/auth/signin?callbackUrl=…` |
+| `/properties` の HTML 内の画像URL | すべて `…/object/sign/property-images/…?token=…`（署名付き）。`…/object/public/…` は 0 件 |
+| `prisma migrate deploy` | `20260828152145_add_rate_limit` 適用済み |
+
+**まだ残っている手動作業（人間）**
+
+- **Supabase の Storage バケット `property-images` を Public 無効（非公開）にする。**
+  2026-08-28 時点で公開のままのため、`https://lcurjpuscalweqhudusw.supabase.co/storage/v1/object/public/property-images/<番号>/001.jpg`
+  へ直アクセスすると 200 で画像が返る（＝会員限定物件の写真がまだ露出している）。
+  アプリはもう公開URLを出していないので、非公開にしても表示は壊れない（署名付きURLで配信）。
+  非公開化後、上記の直アクセスが 400 になることを確認すること。
+- **`.env.migrate` の削除とDBパスワードのローテーション。** 本番接続文字列が平文で残置している。
+- 変更レベル **L3**（認証・個人情報の取り扱いに触れる）。指摘元は 2026-08-28 の脆弱性検品。
 
 ### ① 何を変えるか
 
