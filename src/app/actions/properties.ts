@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import prisma from "@/lib/prisma";
+import { Prisma } from "@/generated/client";
 import { requireAdmin, requireUser, authErrorMessage } from "@/lib/auth";
 import { reportError } from "@/lib/errors";
 import { DISCLOSURE_LEVEL, isValidDisclosureLevel } from "@/config/security";
@@ -175,6 +176,124 @@ type PropertyRow = {
   agencyTel: string | null;
   agencyLicense: string | null;
 };
+
+/**
+ * 一括取込で書き込む列。PropertyRow のキーと過不足なく一致させる。
+ *
+ * 下の型チェックにより、PropertyRow へ列を足してここへ足し忘れるとビルドが通らない
+ * （「DBには列があるのに取込では入らない」を防ぐ）。
+ */
+const PROPERTY_ROW_COLUMNS = [
+  "objMngNo",
+  "syubetu",
+  "syumoku",
+  "title",
+  "priceMan",
+  "madori",
+  "landMen",
+  "bldMen",
+  "bldStructure",
+  "bldY",
+  "bldM",
+  "address",
+  "prefCd",
+  "cityCd",
+  "disclosureLevel",
+  "currentState",
+  "trafficNote",
+  "trafficLine",
+  "trafficStation",
+  "walkMinutes",
+  "leaseTermRent",
+  "keyMoney",
+  "depositGuarantee",
+  "maintenanceCost",
+  "otherLumpSum",
+  "floorsInfo",
+  "parking",
+  "landRight",
+  "deliveryTiming",
+  "transactionType",
+  "listingCompanyNo",
+  "publishedOn",
+  "nextUpdateOn",
+  "mgmtFeeYen",
+  "repairFundYen",
+  "totalUnits",
+  "floorNo",
+  "direction",
+  "balconyMen",
+  "mgmtForm",
+  "buildingCoverage",
+  "floorAreaRatio",
+  "zoning",
+  "landCategory",
+  "cityPlanning",
+  "roadAccess",
+  "privateRoad",
+  "agencyName",
+  "agencyAddress",
+  "agencyTel",
+  "agencyLicense",
+] as const satisfies readonly (keyof PropertyRow)[];
+
+// PROPERTY_ROW_COLUMNS に載っていない PropertyRow のキーがあれば、この行が型エラーになる。
+const _everyPropertyRowColumnListed: Exclude<
+  keyof PropertyRow,
+  (typeof PROPERTY_ROW_COLUMNS)[number]
+> extends never
+  ? true
+  : never = true;
+void _everyPropertyRowColumnListed;
+
+/**
+ * 1文にまとめる行数。
+ *
+ * 【なぜ必要か】2026-09-01、90件の取込が「取込に失敗しました」で全て失敗した。
+ * 原因は1件ずつ upsert を投げていたこと。DBとの往復が件数分だけ積み上がる。
+ * 本番はアプリが iad1（米バージニア）、DBが東京にあり1往復に0.15秒ほどかかるため、
+ * 90件では Prisma の対話型トランザクションの既定上限5秒を超え、
+ * P2028（Transaction not found）で1件も書き込めずに終わっていた。
+ * 数件の取込では上限内に収まるため、件数が増えて初めて表面化した。
+ *
+ * 1文に複数行を積み、往復回数を件数に比例させない。
+ * 1文あたりのパラメータは 52個（51列＋updatedAt）× 40行 ＝ 2,080 個で、
+ * PostgreSQL の上限 65,535 に十分収まる。
+ */
+const UPSERT_CHUNK_SIZE = 40;
+
+/**
+ * 複数行をまとめて INSERT ... ON CONFLICT する1文を組み立てる。
+ * 意味は Prisma の upsert と同じ（objMngNo が既にあれば更新、無ければ追加）。
+ *
+ * 列名は上の定数からだけ作り、値は必ずプレースホルダで渡す（値を文字列連結しない）。
+ * updatedAt は @updatedAt が効かないためここで明示的に入れる。
+ * createdAt はDB側の既定値（CURRENT_TIMESTAMP）に任せ、更新時は触らない。
+ */
+function buildUpsertSql(chunk: PropertyRow[], now: Date) {
+  const columns = Prisma.join(
+    PROPERTY_ROW_COLUMNS.map((column) => Prisma.raw(`"${column}"`))
+  );
+  const values = Prisma.join(
+    chunk.map(
+      (row) =>
+        Prisma.sql`(${Prisma.join(
+          PROPERTY_ROW_COLUMNS.map((column) => row[column])
+        )}, ${now})`
+    )
+  );
+  const assignments = Prisma.join(
+    PROPERTY_ROW_COLUMNS.filter((column) => column !== "objMngNo").map((column) =>
+      Prisma.raw(`"${column}" = EXCLUDED."${column}"`)
+    )
+  );
+
+  return Prisma.sql`
+    INSERT INTO "Property" (${columns}, "updatedAt")
+    VALUES ${values}
+    ON CONFLICT ("objMngNo") DO UPDATE SET ${assignments}, "updatedAt" = ${now}
+  `;
+}
 
 export type DiffResult = {
   type: "new" | "update" | "no_change";
@@ -390,11 +509,24 @@ export async function compareCSVData(csvData: IncomingProperty[]) {
   try {
     const results: DiffResult[] = [];
 
+    // 1行ずつ findUnique を投げると、DBとの往復が行数分だけ積み上がる。
+    // 90件で約23秒かかっていた（取込本体と同じ原因。UPSERT_CHUNK_SIZE の説明を参照）。
+    // 照合に必要な既存データは1回でまとめて引く。
+    const objMngNos = csvData
+      .map((item) => parseObjMngNo(item.objMngNo))
+      .filter((objMngNo): objMngNo is bigint => objMngNo !== null);
+    const existingRows = await prisma.property.findMany({
+      where: { objMngNo: { in: objMngNos } },
+    });
+    const existingByObjMngNo = new Map(
+      existingRows.map((row) => [row.objMngNo.toString(), row])
+    );
+
     for (const item of csvData) {
       const objMngNo = parseObjMngNo(item.objMngNo);
       if (objMngNo === null) continue;
 
-      const existing = await prisma.property.findUnique({ where: { objMngNo } });
+      const existing = existingByObjMngNo.get(objMngNo.toString());
 
       if (!existing) {
         results.push({ type: "new", incoming: item });
@@ -480,6 +612,9 @@ export async function importProperties(
 
   // 取込データを先に検証する。1件でも壊れていれば、1件も書き込まない。
   const rows: PropertyRow[] = [];
+  // 同じ物件管理番号が1つのCSVに2行あると、どちらが正か決められない。
+  // まとめて書き込む文では PostgreSQL 自身が拒否するため、ここで先に止める。
+  const seenObjMngNos = new Set<string>();
   for (const item of approvedItems) {
     const objMngNo = parseObjMngNo(item.objMngNo);
     const priceMan = parseInt(item.priceMan ?? "");
@@ -491,6 +626,14 @@ export async function importProperties(
         }）。`,
       };
     }
+    if (seenObjMngNos.has(objMngNo.toString())) {
+      return {
+        success: false as const,
+        error: `物件管理番号が重複している行があるため、取込を中止しました（対象: ${objMngNo}）。`,
+      };
+    }
+    seenObjMngNos.add(objMngNo.toString());
+
     if (!item.title || !item.address || !item.madori) {
       return {
         success: false as const,
@@ -610,15 +753,20 @@ export async function importProperties(
         },
       });
 
-      for (const data of rows) {
-        await tx.property.upsert({
-          where: { objMngNo: data.objMngNo },
-          update: data,
-          create: data,
-        });
+      // 1件ずつ upsert すると往復が件数分になり、上限時間を超える（UPSERT_CHUNK_SIZE の説明）。
+      const now = new Date();
+      for (let i = 0; i < rows.length; i += UPSERT_CHUNK_SIZE) {
+        await tx.$executeRaw(
+          buildUpsertSql(rows.slice(i, i + UPSERT_CHUNK_SIZE), now)
+        );
       }
 
       return { backupId: backup.id, overwritten: before.length };
+    }, {
+      // 対話型トランザクションの既定上限は5秒。件数が増えても余裕を持たせる
+      // （それでも超えるようなら、往復回数の設計を疑う）。
+      timeout: 60_000,
+      maxWait: 20_000,
     });
 
     revalidatePath("/admin/properties");
