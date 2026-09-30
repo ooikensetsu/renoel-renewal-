@@ -52,6 +52,19 @@ export const RATE_LIMITS = {
   inquiryByRecipient: { limit: 3, windowSeconds: 60 * 60 },
   /** 会員登録：送信元IP単位。 */
   registrationByIp: { limit: 5, windowSeconds: 60 * 60 },
+  /**
+   * S-12：ログイン試行：送信元IP単位。
+   *
+   * アカウント単位のロック（MAX_FAILED_LOGIN_ATTEMPTS）だけでは次の2つが残る。
+   *   1. 1アカウントにつき1回ずつ試す総当たり（パスワードスプレー）は
+   *      ロックに一度も触れずに実行できる
+   *   2. 逆に、メールアドレスを知っていれば任意の会員を故意にロックできる
+   * IP単位で上限を設けて、どちらも試行回数の側で止める。
+   *
+   * 正規の利用者が打ち間違える回数（数回）より十分に大きく、
+   * 総当たりには足りない値にする。
+   */
+  loginByIp: { limit: 20, windowSeconds: 10 * 60 },
 } as const;
 
 /**

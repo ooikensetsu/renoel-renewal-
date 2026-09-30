@@ -33,6 +33,25 @@ export type MailPayload = {
   reply_to?: string;
 };
 
+/**
+ * IPA 8-(iii)：ヘッダへ載る値から改行コードを取り除く。
+ *
+ * 【なぜ必要か】2026-09-03 の監査（docs/inspections.md 指摘5）で、
+ * 会員登録の管理者宛通知の件名に、利用者が入力した氏名がそのまま入り、
+ * `山田\r\nBcc: attacker@example.invalid` が件名に残ることを確認した。
+ *
+ * 送信は Resend の REST API へ JSON で渡すため、ヘッダの組み立ては Resend 側が行う。
+ * したがって現時点で攻撃は成立しない。**それでもここで落とす。**
+ * 防御が外部サービスの実装だけに依存している状態を残さないため。
+ *
+ * 本文（text）には適用しない。問い合わせ本文は複数行が正しい入力であり、
+ * 本文はヘッダではないので改行があっても新しいヘッダにはならない。
+ */
+export function headerSafe(value: string): string {
+  // `+` が要る。CRLF（\r\n）を1文字ずつ置換すると空白2つになる。
+  return value.replace(/[\r\n]+/g, " ").trim();
+}
+
 /** 差出人表記。表示名にダブルクオートが混ざるとヘッダが壊れるため取り除く。 */
 export function formatFrom(): string {
   const safeName = MAIL_FROM.name.replace(/["\r\n]/g, "");
@@ -47,7 +66,7 @@ export function buildRegistrationMail(data: {
 }): MailPayload {
   return {
     from: formatFrom(),
-    to: [data.email],
+    to: [headerSafe(data.email)],
     subject: `【${COMPANY.shortName}】無料会員登録が完了しました`,
     text: `${data.name} 様
 
@@ -85,8 +104,8 @@ export function buildRegistrationAdminMail(data: {
 }): MailPayload {
   return {
     from: formatFrom(),
-    to: [data.adminAddress],
-    subject: `【${COMPANY.shortName}】新規会員登録がありました（${data.name}）`,
+    to: [headerSafe(data.adminAddress)],
+    subject: `【${COMPANY.shortName}】新規会員登録がありました（${headerSafe(data.name)}）`,
     text: `新しい会員登録がありました。
 
 ■ 登録内容
@@ -100,7 +119,7 @@ export function buildRegistrationAdminMail(data: {
 ${SITE_ORIGIN}/admin/users
 
 このメールはシステムが自動送信しています。`,
-    reply_to: data.email,
+    reply_to: headerSafe(data.email),
   };
 }
 
@@ -114,7 +133,7 @@ export function buildInquiryMail(data: {
 }): MailPayload {
   return {
     from: formatFrom(),
-    to: [data.email],
+    to: [headerSafe(data.email)],
     subject: `【${COMPANY.shortName}】物件へのお問い合わせを承りました`,
     text: `${data.name} 様
 
@@ -151,8 +170,8 @@ export function buildInquiryAdminMail(data: {
 }): MailPayload {
   return {
     from: formatFrom(),
-    to: [data.adminAddress],
-    subject: `【${COMPANY.shortName}】物件へのお問い合わせが届きました（${data.propertyTitle}）`,
+    to: [headerSafe(data.adminAddress)],
+    subject: `【${COMPANY.shortName}】物件へのお問い合わせが届きました（${headerSafe(data.propertyTitle)}）`,
     text: `Webサイトからお問い合わせが届きました。
 
 ■ お問い合わせ内容（受付番号: ${data.inquiryId}）
@@ -171,7 +190,7 @@ ${SITE_ORIGIN}/admin/inquiries
 
 このメールはシステムが自動送信しています。
 このまま返信すると、お問い合わせ者へ直接返信されます。`,
-    reply_to: data.email,
+    reply_to: headerSafe(data.email),
   };
 }
 

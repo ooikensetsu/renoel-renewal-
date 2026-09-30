@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import SiteImage from "@/components/SiteImage";
 
 const calculateMortgage = (principal: number, annualRate: number, years: number) => {
   const monthlyRate = annualRate / 12 / 100;
@@ -15,7 +16,6 @@ const calculateMortgage = (principal: number, annualRate: number, years: number)
 };
 
 export default function SimulationPage() {
-  const imgBase = "https://okazaki-bot.github.io/chuko-fudousan-design/";
   const [propertyPrice, setPropertyPrice] = useState(2500); // 万円
   const [reformPrice, setReformPrice] = useState(1000); // 万円
   const [downPayment, setDownPayment] = useState(0); // 万円
@@ -29,7 +29,7 @@ export default function SimulationPage() {
     <>
       <div className="pageHead">
         <div className="pageHead__bg">
-          <img src={`${imgBase}assets/img/hero.jpg`} alt="" />
+          <SiteImage name="pageHero" alt="" />
         </div>
         <div className="container container--wide pageHead__inner">
           <span className="pageHead__en">SIMULATION</span>

@@ -6,15 +6,11 @@ import { reportError } from "@/lib/errors";
 import { sendRegistrationEmail, sendRegistrationAdminNotice } from "@/lib/mail";
 import { ROLE, USER_STATUS, BCRYPT_ROUNDS, RATE_LIMITS } from "@/config/security";
 import { checkRateLimit, clientIp } from "@/lib/rateLimit";
+// S-08：長さの上限と形式の判定は config/inputLimits.ts に集約している（D-19）。
+import { INPUT_LIMITS, isValidEmail, withinLimit } from "@/config/inputLimits";
 
-/** S-08：外部から受け取る値の長さを制限する。 */
-const LIMITS = { name: 100, email: 254, tel: 30, zip: 10, address: 200 } as const;
 /** パスワードの最低文字数。 */
 const MIN_PASSWORD_LENGTH = 8;
-
-function isValidEmail(value: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value) && value.length <= LIMITS.email;
-}
 
 export async function registerUser(formData: FormData) {
   const email = formData.get("email")?.toString()?.trim();
@@ -41,10 +37,10 @@ export async function registerUser(formData: FormData) {
     };
   }
   if (
-    (name && name.length > LIMITS.name) ||
-    (tel && tel.length > LIMITS.tel) ||
-    (zip && zip.length > LIMITS.zip) ||
-    (address && address.length > LIMITS.address)
+    !withinLimit(name, INPUT_LIMITS.name) ||
+    !withinLimit(tel, INPUT_LIMITS.tel) ||
+    !withinLimit(zip, INPUT_LIMITS.zip) ||
+    !withinLimit(address, INPUT_LIMITS.address)
   ) {
     return { success: false as const, error: "入力された文字数が上限を超えています" };
   }

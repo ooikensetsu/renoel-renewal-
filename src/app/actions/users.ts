@@ -5,6 +5,8 @@ import prisma from "@/lib/prisma";
 import { requireAdmin, requireUser, authErrorMessage } from "@/lib/auth";
 import { reportError } from "@/lib/errors";
 import { isValidUserStatus } from "@/config/security";
+// S-08：長さの上限は config/inputLimits.ts に集約している（D-19）。
+import { INPUT_LIMITS, withinLimit } from "@/config/inputLimits";
 
 /**
  * S-07：ここにある関数は "use server"、つまり公開されたHTTPエンドポイントである。
@@ -232,11 +234,18 @@ export async function updateMyProfile(formData: FormData) {
     return { success: false as const, error: authErrorMessage(auth.reason) };
   }
 
-  const name = formData.get("name")?.toString();
-  const tel = formData.get("tel")?.toString();
+  const name = formData.get("name")?.toString()?.trim();
+  const tel = formData.get("tel")?.toString()?.trim();
 
   if (!name) {
     return { success: false as const, error: "お名前は必須です" };
+  }
+
+  // S-08：登録時（registerUser）と同じ上限を適用する。
+  // ここに上限が無かったため、同じ User.name に対して
+  // 「登録時は100字・更新時は無制限」という2通りの規則が並んでいた。
+  if (!withinLimit(name, INPUT_LIMITS.name) || !withinLimit(tel, INPUT_LIMITS.tel)) {
+    return { success: false as const, error: "入力された文字数が上限を超えています" };
   }
 
   try {

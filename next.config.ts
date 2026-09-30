@@ -27,6 +27,9 @@ const SECURITY_HEADERS = [
 ];
 
 const nextConfig: NextConfig = {
+  // 使っているフレームワークとその存在を、全レスポンスで名乗らない。
+  // これ自体は攻撃を防がないが、既知の脆弱性を持つ版を探す走査の的になる理由も無い。
+  poweredByHeader: false,
   async headers() {
     return [{ source: "/:path*", headers: SECURITY_HEADERS }];
   },

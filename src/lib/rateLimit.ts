@@ -73,3 +73,19 @@ export async function checkRateLimit(
     return { ok: true };
   }
 }
+
+/**
+ * key の計数を消す。
+ *
+ * 「失敗が続いたときだけ絞る」を実現するために使う。成功した時点で消せば、
+ * 正しく使えている利用者が上限に当たらない（会社や店舗からの接続は
+ * 全員が同じIPになるため、成功も数えると人数分だけ早く枠を使い切る）。
+ * 消せなくても実害は「枠が残ったまま」だけなので、失敗しても処理は止めない。
+ */
+export async function clearRateLimit(key: string): Promise<void> {
+  try {
+    await prisma.rateLimit.deleteMany({ where: { key } });
+  } catch (error) {
+    console.error("レート制限の計数を消せませんでした:", error);
+  }
+}

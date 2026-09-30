@@ -2,6 +2,17 @@
 /**
  * D-10: デザイン確定版のHTMLをそのまま埋め込んでいるため。
  * 分割するとデザイン崩れの検証が必要になる。
+ *
+ * ■ このファイルの規約（IPA 5-(i)／docs/inspections.md 2026-09-03 指摘4）
+ *
+ * 下の `dangerouslySetInnerHTML` の中では **React のエスケープが効かない。**
+ * したがって、**外部由来の値をここへ入れてはならない。**
+ * 物件名・会員名・問い合わせ本文・URLパラメータ・DBから読んだ値が該当する。
+ * 1つ入れた時点でクロスサイト・スクリプティングになる。
+ *
+ * ここに書いてよいのは `src/config/` の定数と、自サイト内の固定パスだけ。
+ * 外部由来の値を出したいときは JSX 側へ出す（React が自動でエスケープする）。
+ * 実際の許可リストと検査は `homeHtml.test.ts`。`pnpm test` が守る。
  */
 "use client";
 import React, { useEffect } from "react";
@@ -39,7 +50,16 @@ export default function HomePage() {
 
       // main.js は先頭で要素を探し、無ければ何もせずに終わる。
       // 要素がDOMに出てから読み込む（出ていなければ少し待って再確認する）。
-      if (!document.querySelector(".areaMap__region") && tries < 40) {
+      //
+      // 待つ対象は「最後に描画される要素」でなければならない。
+      // 以前は地図（.areaMap__region）だけを見ていたため、地図が出た時点で
+      // main.js を流してしまい、ページ末尾の #pagetop と #cookieBar がまだ
+      // DOM に無かった。その結果 fixedParts() が両方とも取りこぼし、
+      // **ページトップボタンとクッキー同意バーが一度も動いていなかった**。
+      // #cookieBar は差し込むHTMLの最後尾にあるので、これを合図にする。
+      const ready =
+        document.querySelector(".areaMap__region") && document.querySelector("#cookieBar");
+      if (!ready && tries < 40) {
         tries += 1;
         timer = window.setTimeout(load, 100);
         return;

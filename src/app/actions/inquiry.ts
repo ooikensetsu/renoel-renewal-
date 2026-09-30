@@ -7,13 +7,8 @@ import { reportError } from "@/lib/errors";
 import { sendInquiryEmail, sendInquiryAdminNotice } from "@/lib/mail";
 import { RATE_LIMITS, isValidInquiryStatus } from "@/config/security";
 import { checkRateLimit, clientIp, hashForKey } from "@/lib/rateLimit";
-
-/** S-08：外部から受け取る値の長さを制限する。 */
-const LIMITS = { name: 100, email: 254, tel: 30, message: 4000 } as const;
-
-function isValidEmail(value: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value) && value.length <= LIMITS.email;
-}
+// S-08：長さの上限と形式の判定は config/inputLimits.ts に集約している（D-19）。
+import { INPUT_LIMITS, isValidEmail, withinLimit } from "@/config/inputLimits";
 
 /**
  * 物件への問い合わせ送信。未ログインでも送れる（公開フォーム）。
@@ -44,9 +39,9 @@ export async function submitInquiry(formData: FormData) {
       return { success: false as const, error: "メールアドレスの形式が正しくありません" };
     }
     if (
-      name.length > LIMITS.name ||
-      message.length > LIMITS.message ||
-      (tel && tel.length > LIMITS.tel)
+      !withinLimit(name, INPUT_LIMITS.name) ||
+      !withinLimit(message, INPUT_LIMITS.message) ||
+      !withinLimit(tel, INPUT_LIMITS.tel)
     ) {
       return { success: false as const, error: "入力された文字数が上限を超えています" };
     }

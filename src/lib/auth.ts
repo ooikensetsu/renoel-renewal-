@@ -10,7 +10,9 @@ import {
   LOGIN_LOCK_MINUTES,
   SESSION_MAX_AGE_SECONDS,
   BCRYPT_ROUNDS,
+  RATE_LIMITS,
 } from "@/config/security";
+import { checkRateLimit, clearRateLimit, clientIp } from "@/lib/rateLimit";
 
 /**
  * S-12：メールアドレスの登録有無を「応答時間の差」で推測されないための当て馬。
@@ -32,6 +34,39 @@ if (!secret) {
   );
 }
 
+/**
+ * S-12：ログイン試行が、送信元IPあたりの上限に収まっているか。
+ *
+ * 上限を超えていれば false。判定できない場合（リクエストの文脈から
+ * ヘッダを読めない等）は true を返して通す。ここで例外を投げると
+ * ログインそのものが落ちるため、認証を止める側には倒さない。
+ * 数え損ねてもアカウント単位のロックは別途効いている。
+ */
+async function withinLoginRateLimit(): Promise<boolean> {
+  try {
+    const ip = await clientIp();
+    const result = await checkRateLimit(
+      `login:ip:${ip}`,
+      RATE_LIMITS.loginByIp.limit,
+      RATE_LIMITS.loginByIp.windowSeconds
+    );
+    return result.ok;
+  } catch (error) {
+    // D-07：握り潰さずログに残す。
+    console.error("ログイン試行の計数ができませんでした:", error);
+    return true;
+  }
+}
+
+/** S-12：ログインに成功したIPの計数を消す（withinLoginRateLimit の対）。 */
+async function clearLoginRateLimit(): Promise<void> {
+  try {
+    await clearRateLimit(`login:ip:${await clientIp()}`);
+  } catch (error) {
+    console.error("ログイン試行の計数を消せませんでした:", error);
+  }
+}
+
 export const authOptions: NextAuthOptions = {
   session: {
     strategy: "jwt",
@@ -47,6 +82,14 @@ export const authOptions: NextAuthOptions = {
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) {
+          return null;
+        }
+
+        // S-12：送信元IP単位でも試行回数を絞る。
+        // アカウント単位のロックだけでは、1アカウント1回ずつ試す総当たりが
+        // ロックに触れずに通ってしまう（config/security.ts の loginByIp 参照）。
+        // ここで止めれば、照合そのものを走らせずに済む。
+        if (!(await withinLoginRateLimit())) {
           return null;
         }
 
@@ -95,6 +138,11 @@ export const authOptions: NextAuthOptions = {
           });
           return null;
         }
+
+        // S-12：成功したらIP単位の計数も消す。
+        // 店舗や事務所からは全員が同じIPになるため、成功まで数えると
+        // 人数分だけ早く枠を使い切り、正規の利用者が締め出される。
+        await clearLoginRateLimit();
 
         // 成功したらカウンタを戻す
         if (activeUser.failedLoginCount !== 0 || activeUser.lockedUntil !== null) {

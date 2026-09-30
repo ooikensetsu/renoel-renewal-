@@ -1,4 +1,5 @@
 import Link from "next/link";
+import SiteImage from "@/components/SiteImage";
 
 const testimonials = [
   {
@@ -8,7 +9,7 @@ const testimonials = [
     type: "中古戸建てリノベ",
     title: "「中古を買ってリノベ」という選択が正解でした。",
     content: "新築も検討していましたが、自分たちの好きなエリアで理想の広さを確保するには中古リノベが最適でした。間取りも自由に変更でき、新築以上の満足度です。",
-    image: "assets/img/saku-lqh-thm.jpg"
+    image: "case1" as const
   },
   {
     id: 2,
@@ -17,7 +18,7 @@ const testimonials = [
     type: "マンションリノベ",
     title: "築30年のマンションが、最新のホテルのような空間に。",
     content: "古い物件特有の配管や断熱の不安も、担当の方が技術的に詳しく説明してくれたので払拭されました。デザインだけでなく住み心地も最高です。",
-    image: "assets/img/miyota-lqh-thm.jpg"
+    image: "case2" as const
   },
   {
     id: 3,
@@ -26,18 +27,17 @@ const testimonials = [
     type: "中古戸建てリノベ",
     title: "子供の学区を変えずに、理想のマイホームを叶えられました。",
     content: "学区内で探すと新築は手が届かない価格でしたが、365リノベさんなら予算内で土地も建物もリフォームも全て収まり、夢を諦めずに済みました。",
-    image: "assets/img/t_thm.jpg"
+    image: "case3" as const
   }
 ];
 
 export default function VoicePage() {
-  const imgBase = "https://okazaki-bot.github.io/chuko-fudousan-design/";
 
   return (
     <>
       <div className="pageHead">
         <div className="pageHead__bg">
-          <img src={`${imgBase}assets/img/hero.jpg`} alt="" />
+          <SiteImage name="pageHero" alt="" />
         </div>
         <div className="container container--wide pageHead__inner">
           <span className="pageHead__en">CUSTOMER VOICE</span>
@@ -59,7 +59,7 @@ export default function VoicePage() {
               <div key={voice.id} className="voiceCard">
                 <div className="voiceCard__head">
                   <div className="voiceCard__ph">
-                    <img src={`${imgBase}${voice.image}`} alt={voice.name} />
+                    <SiteImage name={voice.image} alt={voice.name} />
                   </div>
                   <div className="voiceCard__who">
                     {voice.name}<br />

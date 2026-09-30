@@ -3,6 +3,8 @@
    RENOEL renewal
    デザインテイスト : usedrenovation.ooi-kensetsu.co.jp（游明朝／#0c313d）
    ページ構成       : okazaki-bot.github.io/chuko-fudousan-design/
+                      （2026-08-31 時点でこのホストは消滅。出典の記録として残す。
+                        画像の取得元としては使っていない。config/siteImages.ts 参照）
    ========================================================================== */
 
 :root{
@@ -922,3 +924,13 @@ address{font-style:normal}
 .header__logo img, .footer__brand img { max-width: 100%; height: auto; display: block; }
 .drawer__list a { text-decoration: none; }
 h1, h2, h3, h4, h5, p { margin: 0; }
+
+/* 画像が未設定のときに <img> の代わりに敷く無地の枠（components/SiteImage.tsx）。
+   壊れた画像アイコンを出さないためのもの。写真が入れば自動的に使われなくなる。 */
+.siteImage--empty{
+  width:100%;
+  height:100%;
+  min-height:120px;
+  background:var(--bg-soft);
+  border:1px solid var(--line-l);
+}

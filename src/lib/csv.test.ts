@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { splitCsvLine, parseCsv } from "./csv.ts";
+import { splitCsvLine, parseCsv, toCsvValue, buildCsv } from "./csv.ts";
 
 /**
  * D-06：取込は「間違った値が静かに入る」形で壊れるため、機械で確かめる。
@@ -41,4 +41,37 @@ test("BOM付きでもヘッダー名が壊れない", () => {
 test("値の数がヘッダーより少なくても落ちない", () => {
   const rows = parseCsv("a,b,c\n1,2\n");
   assert.equal(rows[0].c, "");
+});
+
+test("書き出しでカンマを含む値は引用符で囲まれる", () => {
+  assert.equal(toCsvValue("3LDK（和 8･6　洋 12）,南向き"), '"3LDK（和 8･6　洋 12）,南向き"');
+});
+
+test("書き出しの引用符は二重にして囲まれる", () => {
+  assert.equal(toCsvValue('佐久市 "前山"'), '"佐久市 ""前山"""');
+});
+
+test("書き出しで囲む必要がない値はそのまま", () => {
+  assert.equal(toCsvValue("佐久市前山"), "佐久市前山");
+});
+
+test("数式として実行される先頭文字は無効化される", () => {
+  assert.equal(toCsvValue("=1+1"), "'=1+1");
+  assert.equal(toCsvValue("@SUM(A1)"), "'@SUM(A1)");
+});
+
+test("null と undefined は空文字になる", () => {
+  assert.equal(toCsvValue(null), "");
+  assert.equal(toCsvValue(undefined), "");
+});
+
+test("書き出した CSV を読み直すと元の値に戻る（往復で壊れない）", () => {
+  const csv = buildCsv(
+    ["objMngNo", "title", "address"],
+    [["6991837899", "3LDK（和 8･6　洋 12）,南向き", '佐久市 "前山" 1-2']]
+  );
+  const parsed = parseCsv(csv);
+  assert.equal(parsed.length, 1);
+  assert.equal(parsed[0].title, "3LDK（和 8･6　洋 12）,南向き");
+  assert.equal(parsed[0].address, '佐久市 "前山" 1-2');
 });

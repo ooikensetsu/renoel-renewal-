@@ -1,4 +1,5 @@
 import Link from "next/link";
+import SiteImage from "@/components/SiteImage";
 
 const showrooms = [
   {
@@ -7,7 +8,7 @@ const showrooms = [
     tel: "0120-000-000",
     hours: "10:00 - 18:00",
     closed: "水曜日、第2・第4火曜日",
-    image: "assets/img/saku-lqh-thm.jpg"
+    image: "showroomSaku" as const
   },
   {
     name: "仙台宮城野スタジオ",
@@ -15,7 +16,7 @@ const showrooms = [
     tel: "0120-111-111",
     hours: "10:00 - 18:00",
     closed: "水曜日",
-    image: "assets/img/miyota-lqh-thm.jpg"
+    image: "showroomMiyota" as const
   },
   {
     name: "福島スタジオ",
@@ -23,18 +24,17 @@ const showrooms = [
     tel: "0120-222-222",
     hours: "10:00 - 18:00",
     closed: "水曜日",
-    image: "assets/img/t_thm.jpg"
+    image: "showroomTateshina" as const
   }
 ];
 
 export default function ShowroomPage() {
-  const imgBase = "https://okazaki-bot.github.io/chuko-fudousan-design/";
 
   return (
     <>
       <div className="pageHead">
         <div className="pageHead__bg">
-          <img src={`${imgBase}assets/img/hero.jpg`} alt="" />
+          <SiteImage name="pageHero" alt="" />
         </div>
         <div className="container container--wide pageHead__inner">
           <span className="pageHead__en">STUDIOS</span>
@@ -55,7 +55,7 @@ export default function ShowroomPage() {
             {showrooms.map((shop, idx) => (
               <div key={idx} className="shop">
                 <div className="shop__thumb">
-                  <img src={`${imgBase}${shop.image}`} alt={shop.name} />
+                  <SiteImage name={shop.image} alt={shop.name} />
                 </div>
                 <div className="shop__body">
                   <h2 className="shop__ttl">{shop.name}</h2>

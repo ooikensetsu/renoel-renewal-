@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useMemo, useId } from "react";
-import { parseCsv, decodeCsvBuffer } from "@/lib/csv";
+import { parseCsv, decodeCsvBuffer, buildCsv } from "@/lib/csv";
 import BulkImageUpload from "./BulkImageUpload";
 import {
   Search, Pencil, ImageOff,
@@ -86,7 +86,10 @@ export default function PropertyManagement() {
   const handleExport = () => {
     const headers = ["objMngNo", "title", "priceMan", "madori", "address", "disclosureLevel"];
     const rows = properties.map(p => [p.objMngNo, p.title, p.priceMan, p.madori || "", p.address || "", p.disclosureLevel || 0]);
-    const csvContent = [headers, ...rows].map(e => e.join(",")).join("\n");
+    // buildCsv で引用符処理を通す。以前は join(",") で連結していたため、
+    // 物件名や住所にカンマが1つ入るだけで列がずれ、書き出したCSVを
+    // 取り込み直すと壊れていた（読み取り側の splitCsvLine とだけ食い違っていた）。
+    const csvContent = buildCsv(headers, rows);
     const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);

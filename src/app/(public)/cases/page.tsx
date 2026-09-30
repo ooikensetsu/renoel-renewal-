@@ -1,22 +1,22 @@
 import Link from "next/link";
+import SiteImage from "@/components/SiteImage";
 
 const cases = [
-  { id: 1, title: "ヴィンテージモダンが奏でる、大人の隠れ家", category: "マンション", area: "仙台市", tags: ["#フルリノベ", "#造作キッチン"], image: "assets/img/saku-lqh-thm.jpg" },
-  { id: 2, title: "北欧スタイルと暮らす、光溢れるリビング", category: "一戸建て", area: "名取市", tags: ["#無垢床", "#断熱改修"], image: "assets/img/miyota-lqh-thm.jpg" },
-  { id: 3, title: "インダストリアル×和モダン、異素材の融合", category: "マンション", area: "福島市", tags: ["#趣味の部屋", "#土間"], image: "assets/img/t_thm.jpg" },
-  { id: 4, title: "開放感にこだわった、吹き抜けのある家", category: "一戸建て", area: "仙台市", tags: ["#吹き抜け", "#収納重視"], image: "assets/img/living.jpg" },
-  { id: 5, title: "カフェスタイルを楽しむ、こだわりのキッチン", category: "一戸建て", area: "宇都宮市", tags: ["#キッチン", "#DIY"], image: "assets/img/kitchen.jpg" },
-  { id: 6, title: "限られた空間を最大化する、都心のリノベ", category: "マンション", area: "仙台市", tags: ["#狭小", "#機能的"], image: "assets/img/living.jpg" },
+  { id: 1, title: "ヴィンテージモダンが奏でる、大人の隠れ家", category: "マンション", area: "仙台市", tags: ["#フルリノベ", "#造作キッチン"], image: "case1" as const },
+  { id: 2, title: "北欧スタイルと暮らす、光溢れるリビング", category: "一戸建て", area: "名取市", tags: ["#無垢床", "#断熱改修"], image: "case2" as const },
+  { id: 3, title: "インダストリアル×和モダン、異素材の融合", category: "マンション", area: "福島市", tags: ["#趣味の部屋", "#土間"], image: "case3" as const },
+  { id: 4, title: "開放感にこだわった、吹き抜けのある家", category: "一戸建て", area: "仙台市", tags: ["#吹き抜け", "#収納重視"], image: "case4" as const },
+  { id: 5, title: "カフェスタイルを楽しむ、こだわりのキッチン", category: "一戸建て", area: "宇都宮市", tags: ["#キッチン", "#DIY"], image: "case5" as const },
+  { id: 6, title: "限られた空間を最大化する、都心のリノベ", category: "マンション", area: "仙台市", tags: ["#狭小", "#機能的"], image: "case6" as const },
 ];
 
 export default function CasesPage() {
-  const imgBase = "https://okazaki-bot.github.io/chuko-fudousan-design/";
 
   return (
     <>
       <div className="pageHead">
         <div className="pageHead__bg">
-          <img src={`${imgBase}assets/img/hero.jpg`} alt="" />
+          <SiteImage name="pageHero" alt="" />
         </div>
         <div className="container container--wide pageHead__inner">
           <span className="pageHead__en">WORKS</span>
@@ -56,7 +56,7 @@ export default function CasesPage() {
             {cases.map((work) => (
               <Link key={work.id} href={`/cases/${work.id}`} className="mediaCard">
                 <div className="mediaCard__thumb">
-                  <img src={`${imgBase}${work.image}`} alt={work.title} />
+                  <SiteImage name={work.image} alt={work.title} />
                   <span className="mediaCard__cat">{work.category}</span>
                 </div>
                 <div className="mediaCard__body">

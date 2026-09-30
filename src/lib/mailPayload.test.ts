@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  headerSafe,
   buildRegistrationMail,
   buildRegistrationAdminMail,
   buildInquiryMail,
@@ -121,4 +122,76 @@ test("Resend のエラー応答は1行に要約され、上限文字数に収ま
 
 test("JSONでない応答でもステータスだけは残る", () => {
   assert.equal(summarizeResendError(502, null), "HTTP 502");
+});
+
+/**
+ * IPA 8-(iii)：外部からの入力の全てについて、改行コードを削除する。
+ * docs/inspections.md 2026-09-03 の指摘5。件名・宛先・返信先に改行を残さない。
+ */
+
+test("headerSafe は CR / LF / CRLF を落とし、前後の空白を詰める", () => {
+  assert.equal(headerSafe("山田\r\nBcc: attacker@example.invalid"), "山田 Bcc: attacker@example.invalid");
+  assert.equal(headerSafe("改行\nだけ"), "改行 だけ");
+  assert.equal(headerSafe("復帰\rだけ"), "復帰 だけ");
+  assert.equal(headerSafe("  前後  "), "前後");
+  // 通常の値は変えない
+  assert.equal(headerSafe("佐久 太郎"), "佐久 太郎");
+});
+
+test("入会通知の件名に、氏名の改行が持ち込まれない", () => {
+  const mail = buildRegistrationAdminMail({
+    name: "山田\r\nBcc: attacker@example.invalid",
+    email: "taro@example.com",
+    tel: "",
+    adminAddress: "admin@example.co.jp",
+  });
+  assert.ok(!/[\r\n]/.test(mail.subject), `件名に改行が残っている: ${JSON.stringify(mail.subject)}`);
+  assert.ok(mail.subject.includes("山田"));
+});
+
+test("問い合わせ通知の件名に、物件名の改行が持ち込まれない", () => {
+  const mail = buildInquiryAdminMail({
+    name: "佐久 太郎",
+    email: "taro@example.com",
+    tel: "",
+    message: "内見を希望します",
+    propertyTitle: "佐久平の戸建\r\nX-Injected: 1",
+    inquiryId: 1,
+    adminAddress: "admin@example.co.jp",
+  });
+  assert.ok(!/[\r\n]/.test(mail.subject), `件名に改行が残っている: ${JSON.stringify(mail.subject)}`);
+});
+
+test("宛先と返信先にも改行が残らない", () => {
+  const mail = buildInquiryAdminMail({
+    name: "名無し",
+    email: "taro@example.com\r\nBcc: attacker@example.invalid",
+    tel: "",
+    message: "本文",
+    propertyTitle: "物件",
+    inquiryId: 2,
+    adminAddress: "admin@example.co.jp\r\nX: 1",
+  });
+  assert.ok(!/[\r\n]/.test(mail.to[0]!));
+  assert.ok(!/[\r\n]/.test(mail.reply_to!));
+  // 本人宛の控えも同じ
+  const toUser = buildInquiryMail({
+    name: "名無し",
+    email: "taro@example.com\r\nBcc: attacker@example.invalid",
+    tel: "",
+    message: "本文",
+    propertyTitle: "物件",
+  });
+  assert.ok(!/[\r\n]/.test(toUser.to[0]!));
+});
+
+test("問い合わせ本文の改行は保つ（本文はヘッダではない）", () => {
+  const mail = buildInquiryMail({
+    name: "佐久 太郎",
+    email: "taro@example.com",
+    tel: "",
+    message: "1行目\n2行目",
+    propertyTitle: "物件",
+  });
+  assert.ok(mail.text.includes("1行目\n2行目"));
 });

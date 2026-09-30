@@ -1,4 +1,5 @@
 import Link from "next/link";
+import SiteImage from "@/components/SiteImage";
 
 const newsItems = [
   { id: 1, date: "2026.07.28", category: "イベント", title: "【仙台】中古住宅×リノベーション相談会を開催します" },
@@ -9,13 +10,12 @@ const newsItems = [
 ];
 
 export default function InformationPage() {
-  const imgBase = "https://okazaki-bot.github.io/chuko-fudousan-design/";
 
   return (
     <>
       <div className="pageHead">
         <div className="pageHead__bg">
-          <img src={`${imgBase}assets/img/hero.jpg`} alt="" />
+          <SiteImage name="pageHero" alt="" />
         </div>
         <div className="container container--wide pageHead__inner">
           <span className="pageHead__en">INFORMATION</span>

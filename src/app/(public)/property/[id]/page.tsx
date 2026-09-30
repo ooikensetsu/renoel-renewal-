@@ -11,6 +11,7 @@ import {
 import { COMPANY } from "@/config/company";
 import SignInButton from "@/components/SignInButton";
 import PropertyViewLogger from "./PropertyViewLogger";
+import SiteImage from "@/components/SiteImage";
 
 /**
  * C-03 / S-07：会員限定物件の秘匿をサーバー側へ移した。
@@ -19,7 +20,6 @@ import PropertyViewLogger from "./PropertyViewLogger";
  */
 export const dynamic = "force-dynamic";
 
-const imgBase = "https://okazaki-bot.github.io/chuko-fudousan-design/";
 
 export default async function PropertyDetailPage({
   params,
@@ -47,8 +47,7 @@ export default async function PropertyDetailPage({
       <>
         <div className="pageHead">
           <div className="pageHead__bg">
-            {/* eslint-disable-next-line @next/next/no-img-element -- 外部CMS配信の固定画像 */}
-            <img src={`${imgBase}assets/img/gallery.jpg`} alt="" />
+            <SiteImage name="gallery" alt="" />
           </div>
           <div className="container container--wide pageHead__inner">
             <span className="pageHead__en">MEMBERS ONLY</span>
@@ -138,11 +137,14 @@ export default async function PropertyDetailPage({
     DEFAULT_ANNUAL_RATE_PERCENT,
     DEFAULT_LOAN_YEARS
   );
-  const mainImage = property.images[0] ?? `${imgBase}assets/img/gallery.jpg`;
+  // 物件画像が1枚も登録されていない場合は、代わりの写真を当てない。
+  // 以前は第三者のGitHub Pages上の gallery.jpg を代替に使っていたが、
+  // その物件の写真ではないうえ、配信元が消滅している（config/siteImages.ts）。
+  const mainImage = property.images[0] ?? null;
 
   return (
     <>
-      <PropertyViewLogger propertyId={property.id} propertyTitle={property.title ?? ""} />
+      <PropertyViewLogger propertyId={property.id} />
 
       <nav className="container container--wide breadcrumb mt-8" aria-label="パンくずリスト">
         <ol>
@@ -166,8 +168,12 @@ export default async function PropertyDetailPage({
 
             <div className="gallery">
               <div className="gallery__main">
-                {/* eslint-disable-next-line @next/next/no-img-element -- 物件画像は外部CMS配信 */}
-                <img src={mainImage} alt={property.title ?? "物件画像"} />
+                {mainImage ? (
+                  // eslint-disable-next-line @next/next/no-img-element -- 署名付きURLのため next/image は使わない
+                  <img src={mainImage} alt={property.title ?? "物件画像"} />
+                ) : (
+                  <div className="siteImage--empty" role="img" aria-label="この物件の画像は準備中です" />
+                )}
               </div>
               {property.images.length > 1 && (
                 <div className="gallery__thumbs">

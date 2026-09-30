@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getPublicProperties } from "@/app/actions/properties";
 import { AREAS, areaName, isSupportedArea } from "@/config/property";
+import { siteImage } from "@/config/siteImages";
 
 /**
  * C-03 / S-07：会員限定物件の出し分けをサーバー側に移した。
@@ -21,11 +22,16 @@ export default async function PropertiesPage({
   // 掲載対象のエリアでなければ絞り込まない（不正なコードで空一覧にしない）
   const selectedArea = city && isSupportedArea(city) ? areaName(city) : null;
   const result = await getPublicProperties(selectedArea ? city : undefined);
+  const galleryImage = siteImage("gallery");
 
   return (
     <>
       <section className="memberHero" style={{ minHeight: "200px" }}>
-        <div className="memberHero__photo" style={{ backgroundImage: "url('https://okazaki-bot.github.io/chuko-fudousan-design/assets/img/gallery.jpg')" }}></div>
+        {/* 帯の背景写真。config/siteImages.ts の gallery が未設定なら無地の枠になる。 */}
+        <div
+          className="memberHero__photo"
+          style={galleryImage ? { backgroundImage: `url('${galleryImage}')` } : undefined}
+        ></div>
         <div className="memberHero__panel" style={{ width: "100%", borderRadius: 0, paddingLeft: "5%", minHeight: "200px" }}>
           <div className="memberHero__inner">
             <h1 className="memberHero__ttl">

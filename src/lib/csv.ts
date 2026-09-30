@@ -87,3 +87,35 @@ export function decodeCsvBuffer(buffer: ArrayBuffer): {
     return { text, encoding: "Shift_JIS" };
   }
 }
+
+/**
+ * 1つの値を、CSVの列として安全な形にする。
+ *
+ * 【なぜ必要か】
+ * 書き出し側は `values.join(",")` で連結していた。読み取り側（splitCsvLine）は
+ * RFC 4180 に沿って引用符を解釈するのに、書き出し側だけ素通しだった。
+ * 物件名「3LDK（和 8･6　洋 12）」や住所の補足にカンマが1つ入るだけで列がずれ、
+ * 書き出し → 取り込みの往復でデータが壊れる。
+ *
+ * 【数式の無効化】
+ * = + - @ で始まる値は、Excel / Google スプレッドシートが数式として実行する。
+ * 物件名や住所は athome の取込データと管理画面の入力から来るため、
+ * 開いた人の環境で意図しない計算・外部参照が走らないよう先頭に ' を付ける。
+ */
+export function toCsvValue(value: unknown): string {
+  const text = value === null || value === undefined ? "" : String(value);
+
+  // 数式として解釈される先頭文字を無効化する（CSVインジェクション対策）
+  const safe = /^[=+\-@\t\r]/.test(text) ? `'${text}` : text;
+
+  // 引用符・カンマ・改行を含むなら囲む。中の " は "" にする（RFC 4180）
+  return /[",\r\n]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
+}
+
+/**
+ * ヘッダー行＋データ行を CSV 本文にする。
+ * 改行は CRLF（RFC 4180。Excel が確実に行として扱う）。
+ */
+export function buildCsv(headers: string[], rows: unknown[][]): string {
+  return [headers, ...rows].map((row) => row.map(toCsvValue).join(",")).join("\r\n");
+}

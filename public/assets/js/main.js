@@ -8,6 +8,22 @@
   var $$ = function (s, c) { return Array.prototype.slice.call((c || document).querySelectorAll(s)); };
   var fmt = function (n) { return Math.round(n).toLocaleString('ja-JP'); };
 
+  /* 各ブロックを独立して起動する。
+     このファイルは全体が1つのIIFEで、各機能をベタに並べていた。そのため
+     途中の1ブロックが例外を投げると、以降のブロックが丸ごと実行されなくなる。
+     実際に simulation() が例外を投げ、passwordToggle / memberRegister /
+     fadeIn / fixedParts（ページトップボタン・クッキーバー）が本番で
+     一度も動いていなかった。原因が分かりにくかったのはこの構造のため。
+     ここで包み、1つが倒れても他は動くようにする。 */
+  function run(fn) {
+    try {
+      fn();
+    } catch (e) {
+      // 握り潰さない。どのブロックで落ちたかを名前つきで残す。
+      console.error('[main.js] ' + (fn.name || '無名ブロック') + ' で例外:', e);
+    }
+  }
+
   /* 市町村コード → 市町村名（地図・一覧・検索ボックスの橋渡し） */
   // 掲載対象エリア。src/config/property.ts の AREAS と揃えること。
   // 以前は上田市が入っていて立科町が抜けており、地図と設定が食い違っていた。
@@ -28,7 +44,7 @@
   /* ------------------------------------------------------------------
      1. ドロワー（SP）
   ------------------------------------------------------------------ */
-  (function drawer() {
+  run(function drawer() {
     var btn = $('#drawerBtn'), dw = $('#drawer');
     if (!btn || !dw) return;
 
@@ -51,7 +67,7 @@
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Escape' && dw.classList.contains('is-open')) close();
     });
-  })();
+  });
 
   /* ------------------------------------------------------------------
      2. 検索ボックス（種別タブ／エリア／件数）
@@ -137,7 +153,7 @@
   /* ------------------------------------------------------------------
      3. AREA：地図と市町村一覧の連動 → 検索条件へ反映
   ------------------------------------------------------------------ */
-  (function areaMap() {
+  run(function areaMap() {
     // 施工エリア内（.is-target）のみ操作対象。エリア外は背景として描くだけ
     var regions = $$('.areaMap__region.is-target');
     var items   = $$('.areaMap__listItem');
@@ -190,21 +206,29 @@
         });
       }
     });
-  })();
+  });
 
   /* ------------------------------------------------------------------
      4. 資金計画シミュレーション（元利均等・ボーナス払いなし）
   ------------------------------------------------------------------ */
-  (function simulation() {
+  run(function simulation() {
     var price = $('#simPrice'), reno = $('#simReno'), down = $('#simDown'),
         rate  = $('#simRate'),  years = $('#simYears');
-    if (!price) return;
+    if (!price || !reno || !down || !rate || !years) return;
 
     var out = {
       price: $('#simPriceOut'), reno: $('#simRenoOut'), down: $('#simDownOut'),
       rate: $('#simRateOut'), years: $('#simYearsOut'),
       monthly: $('#simMonthly'), total: $('#simTotal'), years2: $('#simYears2'), rate2: $('#simRate2')
     };
+
+    /* 入力欄だけを見て番人にしていたため、シミュレーターがReactへ移って
+       出力欄（#simPriceOut 等）が無くなったあとも、ここを通り抜けて
+       calc() の中で null.textContent となり例外になっていた。
+       出力欄が1つでも欠けていれば、この機能は今のページには無いものとして降りる。 */
+    for (var k in out) {
+      if (!out[k]) return;
+    }
 
     function calc() {
       var p = +price.value, r0 = +reno.value, d = +down.value,
@@ -233,12 +257,12 @@
       el.addEventListener('input', calc);
     });
     calc();
-  })();
+  });
 
   /* ------------------------------------------------------------------
      5. パスワードの表示／非表示（member.html の登録フォーム）
   ------------------------------------------------------------------ */
-  (function passwordToggle() {
+  run(function passwordToggle() {
     var btns = $$('.pwToggle');
     if (!btns.length) return;
 
@@ -253,12 +277,12 @@
         btn.setAttribute('aria-pressed', String(show));
       });
     });
-  })();
+  });
 
   /* ------------------------------------------------------------------
      6. 会員登録フォーム（STEP1〜4の切替・確認画面への反映）
   ------------------------------------------------------------------ */
-  (function memberRegister() {
+  run(function memberRegister() {
     var panels = $$('.formStep');
     var steps  = $$('#stepBar li');
     var form1  = $('#formStep1');
@@ -339,12 +363,12 @@
         goStep(+a.dataset.to);
       });
     });
-  })();
+  });
 
   /* ------------------------------------------------------------------
      7. スクロールフェードイン
   ------------------------------------------------------------------ */
-  (function fadeIn() {
+  run(function fadeIn() {
     var sel = '.secTtl, .secLead, .propCard, .levelCard, .caseCard, .shopSolo, ' +
               '.voiceCard, .newsCol, .simu__form, ' +
               '.simu__result, .searchBox, .areaMap, .memberCta__inner';
@@ -366,12 +390,12 @@
       });
     }, { threshold: 0.1, rootMargin: '0px 0px -6% 0px' });
     items.forEach(function (i) { io.observe(i); });
-  })();
+  });
 
   /* ------------------------------------------------------------------
      8. ページトップ / Cookie バー
   ------------------------------------------------------------------ */
-  (function fixedParts() {
+  run(function fixedParts() {
     var top = $('#pagetop');
     if (top) {
       window.addEventListener('scroll', function () {
@@ -390,6 +414,6 @@
         try { localStorage.setItem(KEY, '1'); } catch (e) {}
       });
     }
-  })();
+  });
 
 })();
