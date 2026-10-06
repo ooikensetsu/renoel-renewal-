@@ -2,6 +2,7 @@
 
 import prisma from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
+import { SITE_VISIBLE_WHERE } from "@/config/security";
 
 /** 監査ログに残す物件名の上限。長い物件名で ActivityLog を膨らませない。 */
 const TITLE_MAX_LENGTH = 100;
@@ -26,9 +27,10 @@ export async function logPropertyView(propertyId: number) {
     if (!auth.ok) return;
     if (!Number.isInteger(propertyId) || propertyId <= 0) return;
 
-    // 実在しない物件IDでは記録しない（架空のIDでログを水増しさせない）。
-    const property = await prisma.property.findUnique({
-      where: { id: propertyId },
+    // 実在する物件のときだけ記録する。名前もこの結果から取る。
+    // 非表示の物件はサイトに無い扱いなので、閲覧も記録しない。
+    const property = await prisma.property.findFirst({
+      where: { id: propertyId, ...SITE_VISIBLE_WHERE },
       select: { title: true },
     });
     if (!property) return;

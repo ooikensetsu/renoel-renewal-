@@ -2,13 +2,22 @@
 
 import { useState, useRef, useEffect, useMemo, useId } from "react";
 import { parseCsv, decodeCsvBuffer, buildCsv } from "@/lib/csv";
+import { blankToNull } from "@/lib/blank";
 import BulkImageUpload from "./BulkImageUpload";
+import BulkDisclosureBar from "./BulkDisclosureBar";
+import DisclosureBadge from "@/components/DisclosureBadge";
 import {
   Search, Pencil, ImageOff,
   Upload, Download, X, Check, AlertCircle, Info
 } from "lucide-react";
 import Link from "next/link";
-import { DISCLOSURE_LEVEL } from "@/config/security";
+import { DISCLOSURE_LEVEL_LABEL } from "@/config/security";
+import { PROPERTY_TYPE_LABEL } from "@/config/property";
+import {
+  matchesAdminFilter,
+  agencyOptions,
+  type AdminPropertyFilter,
+} from "@/lib/adminPropertyFilter";
 import {
   compareCSVData,
   importProperties,
@@ -19,8 +28,15 @@ import {
 
 type PropertyRow = {
   id: number;
-  /** 物件管理番号。DBは BigInt だがサーバーアクションが文字列にして返す。 */
+  /** 物件管理番号。DBは BigInt だがサーバーアクションが文字列にして返す。CSV出力でだけ使う。 */
   objMngNo: string;
+  /** 掲載会社管理番号。一覧にはこちらを出す（2026-10-06 大野の指示） */
+  listingCompanyNo: string | null;
+  /** 物件種別（src/config/property.ts の PROPERTY_TYPE） */
+  syubetu: number;
+  /** 取扱不動産会社名・電話番号 */
+  agencyName: string | null;
+  agencyTel: string | null;
   title: string;
   priceMan: number;
   madori: string | null;
@@ -52,11 +68,20 @@ export default function PropertyManagement() {
   } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // 一覧の絞り込み。以前は検索窓もフィルタボタンも置いてあるだけで何も起きなかった。
-  const [keyword, setKeyword] = useState("");
-  const [levelFilter, setLevelFilter] = useState<"all" | "public" | "members">("all");
+  // 一覧の絞り込み。判定は src/lib/adminPropertyFilter.ts に集約している。
+  const NO_FILTER: AdminPropertyFilter = { keyword: "", syubetu: "all", level: "all", agency: "all" };
+  const [filter, setFilter] = useState<AdminPropertyFilter>(NO_FILTER);
+  // 一括編集の対象。絞り込みを変えたら選択は解く（見えていない物件を書き換えないため）。
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [notice, setNotice] = useState("");
   const searchId = useId();
   const levelId = useId();
+  const agencyId = useId();
+
+  const updateFilter = (patch: Partial<AdminPropertyFilter>) => {
+    setFilter((prev) => ({ ...prev, ...patch }));
+    setSelectedIds(new Set());
+  };
 
   // 取得だけを行う（useEffect の同期本体で setState しないため分けている）
   const fetchProperties = async () => {
@@ -173,20 +198,34 @@ export default function PropertyManagement() {
     loadProperties();
   };
 
-  // 物件名・管理番号・所在地・間取りを対象に、読み込み済みの一覧を絞り込む。
-  // 件数が数百件の規模なので、サーバーへ問い合わせ直さず手元で絞る。
-  const visibleProperties = useMemo(() => {
-    const kw = keyword.trim().toLowerCase();
-    return properties.filter((p) => {
-      if (levelFilter === "public" && p.disclosureLevel !== DISCLOSURE_LEVEL.PUBLIC) return false;
-      if (levelFilter === "members" && p.disclosureLevel !== DISCLOSURE_LEVEL.MEMBERS) return false;
-      if (kw === "") return true;
-      return [p.title, p.objMngNo, p.address, p.madori, p.areaName]
-        .some((v) => (v ?? "").toLowerCase().includes(kw));
-    });
-  }, [properties, keyword, levelFilter]);
+  const visibleProperties = useMemo(
+    () => properties.filter((p) => matchesAdminFilter(p, filter)),
+    [properties, filter]
+  );
+  const agencyChoices = useMemo(() => agencyOptions(properties), [properties]);
+  // 種別タブの件数。種別以外の絞り込みは効かせたまま数える。
+  const countBySyubetu = (code: "all" | number) =>
+    properties.filter((p) => matchesAdminFilter(p, { ...filter, syubetu: code })).length;
 
-  const isFiltered = keyword.trim() !== "" || levelFilter !== "all";
+  const isFiltered =
+    filter.keyword.trim() !== "" || filter.syubetu !== "all" || filter.level !== "all" || filter.agency !== "all";
+
+  const allVisibleSelected =
+    visibleProperties.length > 0 && visibleProperties.every((p) => selectedIds.has(p.id));
+  const toggleAllVisible = () => {
+    setSelectedIds(allVisibleSelected ? new Set() : new Set(visibleProperties.map((p) => p.id)));
+  };
+  const toggleSelected = (id: number) => {
+    const next = new Set(selectedIds);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setSelectedIds(next);
+  };
+  const handleBulkDone = (message: string) => {
+    setNotice(message);
+    setSelectedIds(new Set());
+    loadProperties();
+  };
 
   const toggleApproval = (index: number) => {
     const newSet = new Set(approvedIndices);
@@ -232,12 +271,44 @@ export default function PropertyManagement() {
         </p>
       )}
 
+      {notice && (
+        <p
+          role="status"
+          className="bg-teal/5 border border-teal/30 text-ink rounded-2xl px-6 py-4 text-sm font-bold"
+        >
+          {notice}
+        </p>
+      )}
+
       <div className="bg-white rounded-2xl border border-reno-line overflow-hidden">
+        {/* ------------ 物件種別の切り替え ------------ */}
+        <div role="tablist" aria-label="物件種別" className="flex flex-wrap gap-2 px-4 pt-4 bg-reno-bg/60">
+          {(["all", ...Object.keys(PROPERTY_TYPE_LABEL).map(Number)] as ("all" | number)[]).map((code) => {
+            const active = filter.syubetu === code;
+            return (
+              <button
+                key={code}
+                role="tab"
+                aria-selected={active}
+                onClick={() => updateFilter({ syubetu: code })}
+                className={`px-4 py-2 rounded-t-xl text-sm font-bold border border-b-0 transition-colors ${
+                  active
+                    ? "bg-white border-reno-line text-ink"
+                    : "bg-transparent border-transparent text-reno-mute-dark hover:text-ink"
+                }`}
+              >
+                {code === "all" ? "すべて" : PROPERTY_TYPE_LABEL[code]}
+                <span className="ml-1.5 text-xs">({countBySyubetu(code)})</span>
+              </button>
+            );
+          })}
+        </div>
+
         {/* ------------ 絞り込み ------------ */}
         <div className="p-4 border-b border-reno-line flex flex-wrap justify-between items-center gap-4 bg-reno-bg/60">
           <div className="flex flex-wrap gap-3 items-center">
             <div className="relative">
-              <label htmlFor={searchId} className="sr-only">物件名・管理番号・所在地で検索</label>
+              <label htmlFor={searchId} className="sr-only">物件名・掲載会社管理番号・所在地で検索</label>
               <Search
                 className="absolute left-3 top-1/2 -translate-y-1/2 text-reno-mute-dark pointer-events-none"
                 size={18}
@@ -245,10 +316,10 @@ export default function PropertyManagement() {
               <input
                 id={searchId}
                 type="search"
-                value={keyword}
-                onChange={(e) => setKeyword(e.target.value)}
-                placeholder="物件名・管理番号・所在地で検索"
-                className="pl-11 pr-4 py-2.5 rounded-xl border border-reno-line bg-white text-sm w-80 outline-none focus:border-teal"
+                value={filter.keyword}
+                onChange={(e) => updateFilter({ keyword: e.target.value })}
+                placeholder="物件名・掲載会社管理番号・所在地で検索"
+                className="pl-11 pr-4 py-2.5 rounded-xl border border-reno-line bg-white text-sm w-96 outline-none focus:border-teal"
               />
             </div>
             <div className="flex items-center gap-2">
@@ -257,18 +328,41 @@ export default function PropertyManagement() {
               </label>
               <select
                 id={levelId}
-                value={levelFilter}
-                onChange={(e) => setLevelFilter(e.target.value as typeof levelFilter)}
+                value={String(filter.level)}
+                onChange={(e) =>
+                  updateFilter({ level: e.target.value === "all" ? "all" : Number(e.target.value) })
+                }
                 className="px-3 py-2.5 rounded-xl border border-reno-line bg-white text-sm font-bold text-ink outline-none focus:border-teal"
               >
                 <option value="all">すべて</option>
-                <option value="public">一般公開</option>
-                <option value="members">会員限定</option>
+                {Object.entries(DISCLOSURE_LEVEL_LABEL).map(([code, label]) => (
+                  <option key={code} value={code}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex items-center gap-2">
+              <label htmlFor={agencyId} className="text-sm font-bold text-reno-mute-dark">
+                取扱店
+              </label>
+              <select
+                id={agencyId}
+                value={filter.agency}
+                onChange={(e) => updateFilter({ agency: e.target.value })}
+                className="px-3 py-2.5 rounded-xl border border-reno-line bg-white text-sm font-bold text-ink outline-none focus:border-teal max-w-64"
+              >
+                <option value="all">すべて</option>
+                {agencyChoices.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}（{o.count}件）
+                  </option>
+                ))}
               </select>
             </div>
             {isFiltered && (
               <button
-                onClick={() => { setKeyword(""); setLevelFilter("all"); }}
+                onClick={() => updateFilter(NO_FILTER)}
                 className="text-sm font-bold text-teal hover:underline"
               >
                 絞り込みを解除
@@ -282,6 +376,13 @@ export default function PropertyManagement() {
           </p>
         </div>
 
+        {/* ------------ 一括編集 ------------ */}
+        <BulkDisclosureBar
+          selectedIds={[...selectedIds]}
+          onClear={() => setSelectedIds(new Set())}
+          onDone={handleBulkDone}
+        />
+
         {/* ------------ 一覧 ------------ */}
         <div className="overflow-x-auto">
           {isLoading ? (
@@ -294,35 +395,57 @@ export default function PropertyManagement() {
             </p>
           ) : visibleProperties.length === 0 ? (
             <p className="p-16 text-center text-sm font-bold text-reno-mute-dark">
-              条件に合う物件がありません。検索語や公開レベルを変えてお試しください。
+              条件に合う物件がありません。検索語や絞り込みを変えてお試しください。
             </p>
           ) : (
-            <table className="w-full min-w-[880px] text-left">
+            <table className="w-full min-w-[940px] text-left">
               <thead>
                 <tr className="bg-reno-bg text-sm font-bold text-reno-mute-dark border-b border-reno-line whitespace-nowrap">
-                  <th scope="col" className="px-6 py-3 w-[36%]">物件情報</th>
-                  <th scope="col" className="px-6 py-3 w-[30%]">所在地 / 間取り</th>
-                  <th scope="col" className="px-6 py-3 text-right w-[12%]">価格</th>
-                  <th scope="col" className="px-6 py-3 w-[12%]">公開レベル</th>
-                  <th scope="col" className="px-6 py-3 text-right w-[10%]">操作</th>
+                  <th scope="col" className="pl-4 pr-1 py-3 w-[4%]">
+                    <input
+                      type="checkbox"
+                      aria-label="表示中の物件をすべて選択"
+                      checked={allVisibleSelected}
+                      onChange={toggleAllVisible}
+                      className="w-4 h-4 accent-teal"
+                    />
+                  </th>
+                  <th scope="col" className="px-4 py-3 w-[30%]">物件情報</th>
+                  <th scope="col" className="px-4 py-3 w-[18%]">取扱店</th>
+                  <th scope="col" className="px-4 py-3 w-[22%]">所在地 / 間取り</th>
+                  <th scope="col" className="px-4 py-3 text-right w-[10%]">価格</th>
+                  <th scope="col" className="px-4 py-3 w-[8%]">公開レベル</th>
+                  <th scope="col" className="px-4 py-3 text-right w-[8%]">操作</th>
                 </tr>
               </thead>
               <tbody className="text-sm text-ink divide-y divide-reno-line">
                 {visibleProperties.map((prop) => (
-                  <tr key={prop.id} className="hover:bg-reno-bg/60 transition-colors">
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-4">
+                  <tr
+                    key={prop.id}
+                    className={`transition-colors ${selectedIds.has(prop.id) ? "bg-teal/5" : "hover:bg-reno-bg/60"}`}
+                  >
+                    <td className="pl-4 pr-1 py-4">
+                      <input
+                        type="checkbox"
+                        aria-label={`${prop.title} を選択`}
+                        checked={selectedIds.has(prop.id)}
+                        onChange={() => toggleSelected(prop.id)}
+                        className="w-4 h-4 accent-teal"
+                      />
+                    </td>
+                    <td className="px-4 py-4">
+                      <div className="flex items-center gap-3">
                         {/* 以前は全物件に Unsplash の同じ写真を出しており、
                             管理画面上でどの物件かを取り違える原因になっていた。 */}
                         {prop.imageUrl ? (
                           <img
                             src={prop.imageUrl}
                             alt=""
-                            className="w-16 h-16 rounded-lg object-cover bg-reno-bg shrink-0"
+                            className="w-12 h-12 rounded-lg object-cover bg-reno-bg shrink-0"
                           />
                         ) : (
                           <span
-                            className="w-16 h-16 rounded-lg bg-reno-bg text-reno-mute-dark flex flex-col items-center justify-center gap-1 shrink-0"
+                            className="w-12 h-12 rounded-lg bg-reno-bg text-reno-mute-dark flex flex-col items-center justify-center gap-0.5 shrink-0"
                             title="画像が登録されていません"
                           >
                             <ImageOff size={18} />
@@ -337,37 +460,36 @@ export default function PropertyManagement() {
                             {prop.title}
                           </Link>
                           <p className="text-xs text-reno-mute-dark mt-1">
-                            管理番号 {prop.objMngNo}
+                            掲載会社管理番号 {blankToNull(prop.listingCompanyNo) ?? "未登録"}
                             {typeof prop.imageCount === "number" && ` ／ 画像 ${prop.imageCount}枚`}
                           </p>
                         </div>
                       </div>
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-4 py-4">
+                      <p className="text-ink">{blankToNull(prop.agencyName) ?? "—"}</p>
+                      <p className="text-xs text-reno-mute-dark mt-1 whitespace-nowrap">
+                        {blankToNull(prop.agencyTel) ?? "電話番号未登録"}
+                      </p>
+                    </td>
+                    <td className="px-4 py-4">
                       <p className="text-ink">{prop.address || "—"}</p>
                       <p className="text-xs text-reno-mute-dark mt-1">
-                        {prop.madori || "間取り未登録"}
+                        {PROPERTY_TYPE_LABEL[prop.syubetu] ?? "種別不明"}
+                        {` ／ ${prop.madori || "間取り未登録"}`}
                         {prop.areaName && ` ／ ${prop.areaName}`}
                       </p>
                     </td>
-                    <td className="px-6 py-4 text-right whitespace-nowrap">
+                    <td className="px-4 py-4 text-right whitespace-nowrap">
                       <span className="font-bold text-ink text-base">
                         {prop.priceMan.toLocaleString("ja-JP")}
                         <span className="text-sm font-bold text-reno-mute-dark ml-0.5">万円</span>
                       </span>
                     </td>
-                    <td className="px-6 py-4">
-                      <span
-                        className={`inline-block px-2.5 py-1 rounded border text-xs font-bold whitespace-nowrap ${
-                          prop.disclosureLevel === DISCLOSURE_LEVEL.MEMBERS
-                            ? "border-pink/40 text-pink bg-pink/5"
-                            : "border-teal/40 text-teal bg-teal/5"
-                        }`}
-                      >
-                        {prop.disclosureLevel === DISCLOSURE_LEVEL.MEMBERS ? "会員限定" : "一般公開"}
-                      </span>
+                    <td className="px-4 py-4">
+                      <DisclosureBadge level={prop.disclosureLevel} />
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-4 py-4">
                       {/* 以前ここに、押しても何も起きない鉛筆ボタンが置かれていた。
                           公開サイトでの見え方の確認は物件詳細に導線があるため、
                           一覧は「編集」だけにして横幅を空けている。 */}

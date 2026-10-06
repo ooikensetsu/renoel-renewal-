@@ -5,7 +5,12 @@ import prisma from "@/lib/prisma";
 import { Prisma } from "@/generated/client";
 import { requireAdmin, requireUser, authErrorMessage } from "@/lib/auth";
 import { reportError } from "@/lib/errors";
-import { DISCLOSURE_LEVEL, isValidDisclosureLevel } from "@/config/security";
+import {
+  DISCLOSURE_LEVEL,
+  DISCLOSURE_LEVEL_LABEL,
+  SITE_VISIBLE_WHERE,
+  isDisclosureLevel,
+} from "@/config/security";
 import { signedImageUrls, toDisplayUrls } from "@/lib/storage";
 import { parseJapaneseDate } from "@/lib/dates";
 import { toJsonSafe } from "@/lib/json";
@@ -324,7 +329,8 @@ export async function getPublicProperties(cityCd?: string, limit?: number) {
     const where = cityCd && isSupportedArea(cityCd) ? { cityCd } : {};
 
     const properties = await prisma.property.findMany({
-      where,
+      // 非表示の物件はサイトに出さない。条件の中身は src/config/security.ts の1箇所。
+      where: { ...where, ...SITE_VISIBLE_WHERE },
       orderBy: { updatedAt: "desc" },
       include: { images: { orderBy: { sortOrder: "asc" } } },
       ...(Number.isInteger(limit) && (limit as number) > 0 ? { take: limit } : {}),
@@ -380,8 +386,9 @@ export async function getPublicPropertyById(id: number) {
   }
 
   try {
-    const p = await prisma.property.findUnique({
-      where: { id },
+    // 非表示の物件は「存在しない」と同じ扱いにする（URLを知っていても見られない）。
+    const p = await prisma.property.findFirst({
+      where: { id, ...SITE_VISIBLE_WHERE },
       include: { images: { orderBy: { sortOrder: "asc" } } },
     });
     if (!p) {
@@ -415,15 +422,15 @@ export async function getPublicPropertyById(id: number) {
         images: await toDisplayUrls(p.images.map((img) => img.path)),
 
         // 物件概要。取扱店（agency*）も返す（大野の指示：管理画面と同じ情報をお客様も見られるように）。
+        agencyName: p.agencyName,
+        agencyAddress: p.agencyAddress,
+        agencyTel: p.agencyTel,
+        agencyLicense: p.agencyLicense,
         trafficNote: p.trafficNote,
         trafficLine: p.trafficLine,
         trafficStation: p.trafficStation,
         walkMinutes: p.walkMinutes,
         listingCompanyNo: p.listingCompanyNo,
-        agencyName: p.agencyName,
-        agencyAddress: p.agencyAddress,
-        agencyTel: p.agencyTel,
-        agencyLicense: p.agencyLicense,
         floorsInfo: p.floorsInfo,
         parking: p.parking,
         landRight: p.landRight,
@@ -662,16 +669,17 @@ export async function importProperties(
       };
     }
 
-    // 公開レベルは 0（公開）か 1（会員限定）のみ。空欄は 0（公開）。
-    // 「1 以外は公開扱い」の判定に落ちるため、2 以上を素通しさせない
-    //（会員限定のつもりが公開される事故を防ぐ。updateProperty と同じ検証）。
-    const disclosureLevel = parseInt(item.disclosureLevel ?? "") || DISCLOSURE_LEVEL.PUBLIC;
-    if (!isValidDisclosureLevel(disclosureLevel)) {
+    // 公開レベルは DISCLOSURE_LEVEL に定義した値のみ。空欄は 0（公開）扱い。
+    // 想定外の値をそのまま入れると「会員限定のつもりが公開されていた」事故になる。
+    const disclosureRaw = (item.disclosureLevel ?? "").trim();
+    const disclosureLevel = disclosureRaw === "" ? DISCLOSURE_LEVEL.PUBLIC : Number(disclosureRaw);
+    if (!isDisclosureLevel(disclosureLevel)) {
+      const valid = Object.entries(DISCLOSURE_LEVEL_LABEL)
+        .map(([code, label]) => `${code}=${label}`)
+        .join(" / ");
       return {
         success: false as const,
-        error: `公開レベルは 0（公開）か 1（会員限定）で指定してください（対象: ${objMngNo} / 値: ${
-          item.disclosureLevel ?? "空"
-        }）。`,
+        error: `公開レベルが正しくない行があるため、取込を中止しました（対象: ${objMngNo} / disclosureLevel: ${disclosureRaw}）。使える値は ${valid} です。`,
       };
     }
 
@@ -923,7 +931,7 @@ export async function updateProperty(id: number, formData: FormData) {
 
   const disclosureLevel = parseInt(formData.get("disclosureLevel")?.toString() ?? "");
   if (Number.isInteger(disclosureLevel)) {
-    if (!isValidDisclosureLevel(disclosureLevel)) {
+    if (!isDisclosureLevel(disclosureLevel)) {
       return { success: false as const, error: "公開レベルが正しくありません。" };
     }
     data.disclosureLevel = disclosureLevel;
@@ -943,12 +951,14 @@ export async function updateProperty(id: number, formData: FormData) {
 
 /**
  * 掲載対象エリアごとの物件件数。トップページの地図に出す。
- * 会員限定の物件も件数には含める（存在すること自体は隠していない）。
+ * 会員限定の物件も件数には含める（存在すること自体は隠していない）。非表示は含めない。
  */
 export async function getAreaPropertyCounts() {
   try {
     const grouped = await prisma.property.groupBy({
       by: ["cityCd"],
+      // 非表示の物件は数えない。
+      where: SITE_VISIBLE_WHERE,
       _count: { _all: true },
     });
     const counts: Record<string, number> = {};

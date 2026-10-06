@@ -26,7 +26,13 @@ const RECENT_LIMIT = 5;
 
 export type DashboardSummary = {
   members: { total: number; active: number; store: number };
-  properties: { total: number; publicCount: number; membersOnly: number; withoutImage: number };
+  properties: {
+    total: number;
+    publicCount: number;
+    membersOnly: number;
+    hiddenCount: number;
+    withoutImage: number;
+  };
   inquiries: { thisMonth: number; unread: number };
   mail: { failed: number };
   recentUsers: {
@@ -70,6 +76,7 @@ export async function getDashboardSummary() {
       propertyTotal,
       propertyPublic,
       propertyMembersOnly,
+      propertyHidden,
       propertyWithoutImage,
       inquiriesThisMonth,
       inquiriesUnread,
@@ -83,6 +90,7 @@ export async function getDashboardSummary() {
       prisma.property.count(),
       prisma.property.count({ where: { disclosureLevel: DISCLOSURE_LEVEL.PUBLIC } }),
       prisma.property.count({ where: { disclosureLevel: DISCLOSURE_LEVEL.MEMBERS } }),
+      prisma.property.count({ where: { disclosureLevel: DISCLOSURE_LEVEL.HIDDEN } }),
       prisma.property.count({ where: { images: { none: {} } } }),
       prisma.inquiry.count({ where: { createdAt: { gte: startOfThisMonth() } } }),
       prisma.inquiry.count({ where: { status: "UNREAD" } }),
@@ -119,6 +127,7 @@ export async function getDashboardSummary() {
         total: propertyTotal,
         publicCount: propertyPublic,
         membersOnly: propertyMembersOnly,
+        hiddenCount: propertyHidden,
         withoutImage: propertyWithoutImage,
       },
       inquiries: { thisMonth: inquiriesThisMonth, unread: inquiriesUnread },

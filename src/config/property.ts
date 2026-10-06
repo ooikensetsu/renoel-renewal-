@@ -61,7 +61,7 @@ export type PropertyTypeCode = (typeof PROPERTY_TYPE)[keyof typeof PROPERTY_TYPE
 /** 種別コード → 表示名。 */
 export const PROPERTY_TYPE_LABEL: Record<number, string> = {
   [PROPERTY_TYPE.LAND]: "土地",
-  [PROPERTY_TYPE.HOUSE]: "一戸建て",
+  [PROPERTY_TYPE.HOUSE]: "中古一戸建て",
   [PROPERTY_TYPE.MANSION]: "マンション",
 };
 

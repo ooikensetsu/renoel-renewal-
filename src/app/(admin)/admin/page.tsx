@@ -4,7 +4,7 @@ import {
   ArrowRight, MailWarning, Inbox, CheckCircle2,
 } from "lucide-react";
 import { getDashboardSummary } from "@/app/actions/dashboard";
-import { DISCLOSURE_LEVEL } from "@/config/security";
+import DisclosureBadge from "@/components/DisclosureBadge";
 
 /**
  * 管理者ダッシュボード。
@@ -168,7 +168,7 @@ export default async function AdminDashboard() {
           value={d.properties.total}
           unit="件"
           icon={Building2}
-          note={`一般公開 ${n(d.properties.publicCount)}件 ／ 会員限定 ${n(d.properties.membersOnly)}件`}
+          note={`一般公開 ${n(d.properties.publicCount)}件 ／ 会員限定 ${n(d.properties.membersOnly)}件 ／ 非表示 ${n(d.properties.hiddenCount)}件`}
           href="/admin/properties"
           tone="teal"
         />
@@ -286,15 +286,7 @@ export default async function AdminDashboard() {
                         {n(p.priceMan)}万円
                       </span>
                     </span>
-                    <span
-                      className={`text-xs font-bold px-2 py-1 rounded border whitespace-nowrap ${
-                        p.disclosureLevel === DISCLOSURE_LEVEL.MEMBERS
-                          ? "border-pink/40 text-pink bg-pink/5"
-                          : "border-teal/40 text-teal bg-teal/5"
-                      }`}
-                    >
-                      {p.disclosureLevel === DISCLOSURE_LEVEL.MEMBERS ? "会員限定" : "一般公開"}
-                    </span>
+                    <DisclosureBadge level={p.disclosureLevel} />
                   </Link>
                 </li>
               ))}

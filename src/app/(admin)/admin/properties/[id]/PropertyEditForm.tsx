@@ -6,6 +6,7 @@ import { updateProperty } from "@/app/actions/properties";
 import { PROPERTY_FIELD_GROUPS, type FieldDef } from "@/config/propertyFields";
 import { AREAS } from "@/config/property";
 import { PROPERTY_TYPE_LABEL } from "@/config/property";
+import { DISCLOSURE_LEVEL_LABEL } from "@/config/security";
 
 /** 入力欄の初期値。null と undefined は空文字にする。日付は YYYY-MM-DD にする。 */
 function initialValue(value: unknown, type: FieldDef["type"]): string {
@@ -81,8 +82,11 @@ export default function PropertyEditForm({
               defaultValue={String(property.disclosureLevel ?? 0)}
               className={inputClass}
             >
-              <option value="0">一般公開</option>
-              <option value="1">会員限定（未ログインには価格・所在地を返さない）</option>
+              {Object.entries(DISCLOSURE_LEVEL_LABEL).map(([code, label]) => (
+                <option key={code} value={code}>
+                  {label}
+                </option>
+              ))}
             </select>
           </div>
           <div>

@@ -71,10 +71,16 @@ export const RATE_LIMITS = {
  * 物件の公開レベル。
  * PUBLIC   … 誰でも全情報を見られる
  * MEMBERS  … 未ログインには価格・所在地・画像を返さない（サーバー側で落とす。S-07）
+ * HIDDEN   … サイトには一切出さない（一覧・詳細・件数のどれにも含めない）。管理画面でだけ見える
+ *
+ * ⚠️ HIDDEN（2）を足す前のコードは「MEMBERS 以外＝一般公開」と判定する。
+ * 2026-10-06 より前のコードへ戻すときは、先に HIDDEN の行を MEMBERS へ書き換えること
+ * （戻し方は docs/releases.md の 2026-10-06 の行）。
  */
 export const DISCLOSURE_LEVEL = {
   PUBLIC: 0,
   MEMBERS: 1,
+  HIDDEN: 2,
 } as const;
 
 /** 会員の状態として受け付けてよい値か（画面・APIから来た文字列の検証用）。 */
@@ -91,13 +97,30 @@ export function isValidInquiryStatus(
   return value === INQUIRY_STATUS.UNREAD || value === INQUIRY_STATUS.REPLIED;
 }
 
-/**
- * 公開レベルとして受け付けてよい値か。
- * 「1（会員限定）以外は公開扱い」という判定に落ちるため、2 以上の値を
- * 素通しさせない（会員限定のつもりが公開される事故を防ぐ）。
- */
-export function isValidDisclosureLevel(
-  value: number
-): value is (typeof DISCLOSURE_LEVEL)[keyof typeof DISCLOSURE_LEVEL] {
-  return value === DISCLOSURE_LEVEL.PUBLIC || value === DISCLOSURE_LEVEL.MEMBERS;
+export type DisclosureLevel = (typeof DISCLOSURE_LEVEL)[keyof typeof DISCLOSURE_LEVEL];
+
+/** 公開レベルの表示名。管理画面の選択肢・バッジ・絞り込みはすべてここから作る。 */
+export const DISCLOSURE_LEVEL_LABEL: Record<DisclosureLevel, string> = {
+  [DISCLOSURE_LEVEL.PUBLIC]: "一般公開",
+  [DISCLOSURE_LEVEL.MEMBERS]: "会員限定",
+  [DISCLOSURE_LEVEL.HIDDEN]: "非表示",
+};
+
+/** 公開レベルとして受け付けてよい値か（CSV取込・編集・一括編集の検証で使う）。 */
+export function isDisclosureLevel(value: unknown): value is DisclosureLevel {
+  return Object.values(DISCLOSURE_LEVEL).includes(value as DisclosureLevel);
 }
+
+/**
+ * サイトに出してよい公開レベル。公開側の取得はすべてこれで絞る（D-09）。
+ * 非表示をサイトから外す判断はここ1箇所にある。
+ */
+export const SITE_VISIBLE_LEVELS: readonly DisclosureLevel[] = [
+  DISCLOSURE_LEVEL.PUBLIC,
+  DISCLOSURE_LEVEL.MEMBERS,
+];
+
+/** 公開側で物件を取るときに必ず where へ混ぜる条件。 */
+export const SITE_VISIBLE_WHERE = {
+  disclosureLevel: { in: [...SITE_VISIBLE_LEVELS] },
+};

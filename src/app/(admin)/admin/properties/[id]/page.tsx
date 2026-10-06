@@ -3,6 +3,7 @@ import Link from "next/link";
 import { getPropertyForAdmin } from "@/app/actions/properties";
 import PropertyEditForm from "./PropertyEditForm";
 import PropertyImages from "./PropertyImages";
+import DisclosureBadge from "@/components/DisclosureBadge";
 import { isStorageConfigured } from "@/lib/storage";
 
 /**
@@ -66,15 +67,7 @@ export default async function PropertyAdminDetail({
           <span className="bg-teal/5 text-teal text-xs font-bold px-2 py-1 rounded">
             {p.syumoku}
           </span>
-          <span
-            className={`text-xs font-bold px-2 py-1 rounded ${
-              p.disclosureLevel === 1
-                ? "bg-red-50 text-red-600"
-                : "border border-teal/40 text-teal bg-teal/5"
-            }`}
-          >
-            {p.disclosureLevel === 1 ? "会員限定" : "一般公開"}
-          </span>
+          <DisclosureBadge level={p.disclosureLevel} />
           {p.areaName && (
             <span className="bg-reno-bg text-ink text-xs font-bold px-2 py-1 rounded">
               {p.areaName}

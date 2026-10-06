@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import {
   isValidUserStatus,
   isValidInquiryStatus,
-  isValidDisclosureLevel,
+  isDisclosureLevel,
 } from "./security.ts";
 
 test("isValidUserStatus は ACTIVE / SUSPENDED だけ通す", () => {
@@ -24,10 +24,12 @@ test("isValidInquiryStatus は UNREAD / REPLIED だけ通す", () => {
   assert.equal(isValidInquiryStatus("replied"), false);
 });
 
-test("isValidDisclosureLevel は 0 / 1 だけ通す（2以上を弾く）", () => {
-  assert.equal(isValidDisclosureLevel(0), true);
-  assert.equal(isValidDisclosureLevel(1), true);
-  assert.equal(isValidDisclosureLevel(2), false);
-  assert.equal(isValidDisclosureLevel(-1), false);
-  assert.equal(isValidDisclosureLevel(Number.NaN), false);
+test("isDisclosureLevel は 0 / 1 / 2（非表示）だけ通す（3以上を弾く）", () => {
+  assert.equal(isDisclosureLevel(0), true);
+  assert.equal(isDisclosureLevel(1), true);
+  assert.equal(isDisclosureLevel(2), true);
+  assert.equal(isDisclosureLevel(3), false);
+  assert.equal(isDisclosureLevel(-1), false);
+  assert.equal(isDisclosureLevel(Number.NaN), false);
+  assert.equal(isDisclosureLevel("1"), false);
 });
