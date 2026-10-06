@@ -246,8 +246,13 @@ async function matchWithExisting(items: IncomingProperty[]) {
  *
  * @param cityCd  指定すると、その市区町村の物件だけを返す。掲載対象外のコードは無視する
  * @param limit   返す件数の上限。トップページのエリア別表示（6件）で使う
+ * @param options onlyTop=true で「トップ掲載」にチェックした物件だけを返す
  */
-export async function getPublicProperties(cityCd?: string, limit?: number) {
+export async function getPublicProperties(
+  cityCd?: string,
+  limit?: number,
+  options: { onlyTop?: boolean } = {}
+) {
   const auth = await requireUser();
   const isMember = auth.ok;
 
@@ -257,7 +262,7 @@ export async function getPublicProperties(cityCd?: string, limit?: number) {
 
     const properties = await prisma.property.findMany({
       // 非表示の物件はサイトに出さない。条件の中身は src/config/security.ts の1箇所。
-      where: { ...where, ...SITE_VISIBLE_WHERE },
+      where: { ...where, ...SITE_VISIBLE_WHERE, ...(options.onlyTop ? { showOnTop: true } : {}) },
       orderBy: { updatedAt: "desc" },
       include: { images: { orderBy: { sortOrder: "asc" } } },
       ...(Number.isInteger(limit) && (limit as number) > 0 ? { take: limit } : {}),
@@ -300,6 +305,35 @@ export async function getPublicProperties(cityCd?: string, limit?: number) {
     };
   } catch (error) {
     return reportError("getPublicProperties", error, "物件を取得できませんでした。");
+  }
+}
+
+/**
+ * トップページの「新着物件」。管理画面で「トップ掲載」にチェックした物件を全件、更新の新しい順に返す。
+ * 非表示の物件はチェックが入っていても出さない（getPublicProperties の SITE_VISIBLE_WHERE）。
+ */
+export async function getTopProperties() {
+  return getPublicProperties(undefined, undefined, { onlyTop: true });
+}
+
+/**
+ * 「トップ掲載」の切り替え（管理者のみ）。管理画面の物件一覧のチェックボックスから呼ぶ。
+ */
+export async function setShowOnTop(id: number, showOnTop: boolean) {
+  const auth = await requireAdmin();
+  if (!auth.ok) {
+    return { success: false as const, error: authErrorMessage(auth.reason) };
+  }
+  if (!Number.isInteger(id) || id <= 0 || typeof showOnTop !== "boolean") {
+    return { success: false as const, error: "指定が正しくありません。" };
+  }
+  try {
+    await prisma.property.update({ where: { id }, data: { showOnTop } });
+    revalidatePath("/");
+    revalidatePath("/admin/properties");
+    return { success: true as const };
+  } catch (error) {
+    return reportError("setShowOnTop", error, "トップ掲載を変更できませんでした。");
   }
 }
 

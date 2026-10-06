@@ -38,6 +38,9 @@ model Property {
   disclosureLevel  Int             @default(0)
   priceDown        Boolean         @default(false)
   reformTarget     Boolean         @default(false)
+  /// トップページの「新着物件」に出すか。管理画面の物件一覧のチェックボックスで切り替える（2026-10-06）。
+  /// CSV取込では書き換えない（BULK_UPSERT_COLUMNS に入れていない）
+  showOnTop        Boolean         @default(false)
 
   // ───────── 物件概要（athome の表示項目に対応。全て任意）─────────
   // 値が入らない項目は athome 上で「－」と表示されるもの。無理に構造化せず、

@@ -22,6 +22,7 @@ import {
   compareCSVData,
   importProperties,
   getProperties,
+  setShowOnTop,
   type DiffResult,
   type IncomingProperty,
 } from "@/app/actions/properties";
@@ -37,6 +38,8 @@ type PropertyRow = {
   /** 取扱不動産会社名・電話番号 */
   agencyName: string | null;
   agencyTel: string | null;
+  /** トップページの「新着物件」に出すか */
+  showOnTop: boolean;
   title: string;
   priceMan: number;
   madori: string | null;
@@ -222,6 +225,26 @@ export default function PropertyManagement() {
     else next.add(id);
     setSelectedIds(next);
   };
+  // トップ掲載の切り替え。押した瞬間に画面へ反映し、失敗したら元に戻して理由を出す。
+  const toggleShowOnTop = async (id: number, next: boolean) => {
+    const apply = (value: boolean) =>
+      setProperties((prev) => prev.map((p) => (p.id === id ? { ...p, showOnTop: value } : p)));
+    apply(next);
+    setErrorMessage("");
+    try {
+      const res = await setShowOnTop(id, next);
+      if (!res.success) {
+        apply(!next);
+        setErrorMessage(res.error);
+      }
+    } catch (err) {
+      console.error("トップ掲載の切り替えに失敗:", err);
+      apply(!next);
+      setErrorMessage("サーバーとの通信に失敗したため、トップ掲載を変更していません。");
+    }
+  };
+  const topCount = properties.filter((p) => p.showOnTop).length;
+
   const handleBulkDone = (message: string) => {
     setNotice(message);
     setSelectedIds(new Set());
@@ -375,6 +398,7 @@ export default function PropertyManagement() {
             {isFiltered
               ? `${visibleProperties.length} 件 / 全 ${properties.length} 件`
               : `全 ${properties.length} 件`}
+            {`（トップ掲載 ${topCount} 件）`}
           </p>
         </div>
 
@@ -412,12 +436,15 @@ export default function PropertyManagement() {
                       className="w-4 h-4 accent-teal"
                     />
                   </th>
-                  <th scope="col" className="px-4 py-3 w-[30%]">物件情報</th>
-                  <th scope="col" className="px-4 py-3 w-[18%]">取扱店</th>
-                  <th scope="col" className="px-4 py-3 w-[22%]">所在地 / 間取り</th>
-                  <th scope="col" className="px-4 py-3 text-right w-[10%]">価格</th>
-                  <th scope="col" className="px-4 py-3 w-[8%]">公開レベル</th>
-                  <th scope="col" className="px-4 py-3 text-right w-[8%]">操作</th>
+                  <th scope="col" className="px-3 py-3 w-[28%]">物件情報</th>
+                  <th scope="col" className="px-3 py-3 w-[16%]">取扱店</th>
+                  <th scope="col" className="px-3 py-3 w-[20%]">所在地 / 間取り</th>
+                  <th scope="col" className="px-3 py-3 text-right w-[10%]">価格</th>
+                  <th scope="col" className="px-3 py-3 w-[7%]">公開レベル</th>
+                  <th scope="col" className="px-2 py-3 w-[7%] text-center" title="チェックした物件をトップページの「新着物件」に出します">
+                    トップ<span className="sr-only">ページの新着物件に掲載</span>
+                  </th>
+                  <th scope="col" className="px-3 py-3 text-right w-[8%]">操作</th>
                 </tr>
               </thead>
               <tbody className="text-sm text-ink divide-y divide-reno-line">
@@ -435,7 +462,7 @@ export default function PropertyManagement() {
                         className="w-4 h-4 accent-teal"
                       />
                     </td>
-                    <td className="px-4 py-4">
+                    <td className="px-3 py-4">
                       <div className="flex items-center gap-3">
                         {/* 以前は全物件に Unsplash の同じ写真を出しており、
                             管理画面上でどの物件かを取り違える原因になっていた。 */}
@@ -443,15 +470,15 @@ export default function PropertyManagement() {
                           <img
                             src={prop.imageUrl}
                             alt=""
-                            className="w-12 h-12 rounded-lg object-cover bg-reno-bg shrink-0"
+                            className="w-10 h-10 rounded-lg object-cover bg-reno-bg shrink-0"
                           />
                         ) : (
                           <span
-                            className="w-12 h-12 rounded-lg bg-reno-bg text-reno-mute-dark flex flex-col items-center justify-center gap-0.5 shrink-0"
+                            className="w-10 h-10 rounded-lg bg-reno-bg text-reno-mute-dark flex flex-col items-center justify-center gap-0.5 shrink-0"
                             title="画像が登録されていません"
                           >
-                            <ImageOff size={18} />
-                            <span className="text-xs font-bold">画像なし</span>
+                            <ImageOff size={18} aria-hidden="true" />
+                            <span className="sr-only">画像なし</span>
                           </span>
                         )}
                         <div className="min-w-0">
@@ -468,13 +495,13 @@ export default function PropertyManagement() {
                         </div>
                       </div>
                     </td>
-                    <td className="px-4 py-4">
+                    <td className="px-3 py-4">
                       <p className="text-ink">{blankToNull(prop.agencyName) ?? "—"}</p>
                       <p className="text-xs text-reno-mute-dark mt-1 whitespace-nowrap">
                         {blankToNull(prop.agencyTel) ?? "電話番号未登録"}
                       </p>
                     </td>
-                    <td className="px-4 py-4">
+                    <td className="px-3 py-4">
                       <p className="text-ink">{prop.address || "—"}</p>
                       <p className="text-xs text-reno-mute-dark mt-1">
                         {PROPERTY_TYPE_LABEL[prop.syubetu] ?? "種別不明"}
@@ -482,16 +509,25 @@ export default function PropertyManagement() {
                         {prop.areaName && ` ／ ${prop.areaName}`}
                       </p>
                     </td>
-                    <td className="px-4 py-4 text-right whitespace-nowrap">
+                    <td className="px-3 py-4 text-right whitespace-nowrap">
                       <span className="font-bold text-ink text-base">
                         {prop.priceMan.toLocaleString("ja-JP")}
                         <span className="text-sm font-bold text-reno-mute-dark ml-0.5">万円</span>
                       </span>
                     </td>
-                    <td className="px-4 py-4">
+                    <td className="px-3 py-4">
                       <DisclosureBadge level={prop.disclosureLevel} />
                     </td>
-                    <td className="px-4 py-4">
+                    <td className="px-2 py-4 text-center">
+                      <input
+                        type="checkbox"
+                        aria-label={`${prop.title} をトップページの新着物件に掲載`}
+                        checked={prop.showOnTop}
+                        onChange={(e) => toggleShowOnTop(prop.id, e.target.checked)}
+                        className="w-4 h-4 accent-teal"
+                      />
+                    </td>
+                    <td className="px-3 py-4">
                       {/* 以前ここに、押しても何も起きない鉛筆ボタンが置かれていた。
                           公開サイトでの見え方の確認は物件詳細に導線があるため、
                           一覧は「編集」だけにして横幅を空けている。 */}

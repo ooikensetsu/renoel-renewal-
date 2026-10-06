@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { getPublicProperties } from "@/app/actions/properties";
+import { getTopProperties } from "@/app/actions/properties";
 import { areaName } from "@/config/property";
 import { calculateMonthlyPayment } from "@/lib/loan";
 import {
@@ -19,8 +19,10 @@ import {
  * 実在しない物件を見て問い合わせが来る状態だったため、DBの新着に置き換えた。
  *
  * 月々の目安は src/lib/loan.ts の計算を使う。物件詳細ページと同じ式・同じ前提。
+ *
+ * 2026-10-13 から、出す物件は管理画面の「トップ掲載」にチェックした物件の全件（更新の新しい順）。
+ * それまでは更新の新しい順に3件を自動で出していた（モリシタ版 96464aa の移植）。
  */
-const COUNT = 3;
 
 type Item = {
   id: number;
@@ -38,10 +40,17 @@ type Item = {
 
 export default function NewArrivals() {
   const [items, setItems] = useState<Item[] | null>(null);
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    getPublicProperties(undefined, COUNT).then((res) => {
-      setItems(res.success ? (res.data as Item[]) : []);
+    getTopProperties().then((res) => {
+      if (res.success) {
+        setItems(res.data as Item[]);
+      } else {
+        // D-07：握り潰さない。画面には内部情報を出さず、失敗した事実だけ伝える。
+        setItems([]);
+        setError(res.error);
+      }
     });
   }, []);
 
@@ -56,9 +65,10 @@ export default function NewArrivals() {
         </p>
 
         {items === null && <p style={{ padding: "24px 0" }}>読み込んでいます…</p>}
+        {error && <p style={{ padding: "24px 0" }}>{error}</p>}
 
-        {items !== null && items.length === 0 && (
-          <p style={{ padding: "24px 0" }}>現在公開中の物件はありません。</p>
+        {items !== null && !error && items.length === 0 && (
+          <p style={{ padding: "24px 0" }}>現在掲載中の新着物件はありません。</p>
         )}
 
         {items !== null && items.length > 0 && (
