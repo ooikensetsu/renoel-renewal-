@@ -77,8 +77,8 @@ async function saveOne(
 /**
  * ファイル名で物件に紐づける一括アップロード（管理者のみ）。
  *
- * ファイル名は「物件管理番号_連番.拡張子」（例: 6991580385_2.jpg）。
- * 番号がDBの物件と一致しないファイルは**取り込まずに理由を返す**。
+ * ファイル名は「掲載会社管理番号_連番.拡張子」（例: b01771-004624_2.jpg）。2026-10-06 に物件管理番号から変更。
+ * 番号がDBの物件と一致しない・複数の物件に一致するファイルは**取り込まずに理由を返す**。
  * D-17 と同じ考え方で、1件ずつ結果を出して人が確認できるようにする。
  */
 export async function uploadImagesByFileName(formData: FormData): Promise<
@@ -115,20 +115,33 @@ export async function uploadImagesByFileName(formData: FormData): Promise<
         continue;
       }
 
-      const property = await prisma.property.findUnique({
-        where: { objMngNo: BigInt(parsed.objMngNo) },
-        select: { id: true, title: true },
+      // 掲載会社管理番号は会社ごとの採番なので、別会社と同じ番号がありうる。
+      // 2件以上当たったときは、どちらの物件か決められないので取り込まない。
+      const candidates = await prisma.property.findMany({
+        where: { listingCompanyNo: parsed.listingCompanyNo },
+        select: { id: true, title: true, objMngNo: true },
+        take: 2,
       });
-      if (!property) {
+      if (candidates.length === 0) {
         results.push({
           fileName: file.name,
           ok: false,
-          message: `物件管理番号 ${parsed.objMngNo} の物件が見つかりません`,
+          message: `掲載会社管理番号 ${parsed.listingCompanyNo} の物件が見つかりません`,
         });
         continue;
       }
+      if (candidates.length > 1) {
+        results.push({
+          fileName: file.name,
+          ok: false,
+          message: `掲載会社管理番号 ${parsed.listingCompanyNo} の物件が複数あります（取扱店違い）。物件詳細の画面から1件ずつ登録してください`,
+        });
+        continue;
+      }
+      const [property] = candidates;
 
-      const saved = await saveOne(property.id, parsed.objMngNo, parsed.order, parsed.ext, file);
+      // 保存先のフォルダ名は従来どおり物件管理番号（Storage 内部の置き場で、画面には出ない）。
+      const saved = await saveOne(property.id, property.objMngNo.toString(), parsed.order, parsed.ext, file);
       results.push({
         fileName: file.name,
         ok: saved.ok,

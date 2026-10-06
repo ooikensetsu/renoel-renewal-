@@ -11,7 +11,7 @@ import {
 import { MAX_FILE_LABEL, MAX_IMAGES_PER_PROPERTY, ALLOWED_EXTENSIONS } from "@/config/images";
 
 /**
- * ファイル名で物件に紐づける一括アップロード。
+ * ファイル名（掲載会社管理番号_連番）で物件に紐づける一括アップロード。
  * 「6991580385_1.jpg」のように物件管理番号を先頭に付けたファイルをまとめて選ぶ。
  * 番号が一致しないファイルは取り込まず、理由を1件ずつ出す（CSV取込と同じ考え方）。
  */
@@ -83,11 +83,11 @@ export default function BulkImageUpload() {
             </div>
 
             <div className="bg-teal/5 border border-teal/20 rounded-2xl p-5 text-xs font-bold text-ink space-y-2">
-              <p>ファイル名を「物件管理番号_連番.拡張子」にしてください。</p>
+              <p>ファイル名を「掲載会社管理番号_連番.拡張子」にしてください。区切りは「_」です。</p>
               <pre className="bg-white/70 rounded-xl p-3 text-xs leading-relaxed">
-{`6991580385_1.jpg   → 内山の物件の 1枚目
-6991580385_2.jpg   → 内山の物件の 2枚目
-6991837899_1.jpg   → 前山の物件の 1枚目`}
+{`b01771-004624_1.jpg   → 1枚目
+b01771-004624_2.jpg   → 2枚目
+b01771-004624.jpg     → 連番を省くと 1枚目`}
               </pre>
               <p>
                 {ALLOWED_EXTENSIONS.join(" / ")}・1枚 {MAX_FILE_LABEL} まで・
@@ -95,7 +95,8 @@ export default function BulkImageUpload() {
                 同じ連番のファイルを入れると、その枚だけ差し替わります。
               </p>
               <p className="text-ink">
-                物件管理番号がDBに無いファイルは取り込みません。理由を下に出します。
+                掲載会社管理番号が見つからない・別の取扱店に同じ番号がある・番号が空の物件には取り込みません。
+                理由を下に出します。これらは物件詳細の画面から1件ずつ登録してください。
               </p>
             </div>
 
