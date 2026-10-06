@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { DISCLOSURE_LEVEL_LABEL } from "@/config/security";
-import { PROPERTY_TYPE_LABEL } from "@/config/property";
+import { PROPERTY_TYPE_LABEL, PROPERTY_TYPE_TAB_ORDER } from "@/config/property";
 import {
   matchesAdminFilter,
   agencyOptions,
@@ -152,7 +152,8 @@ export default function PropertyManagement() {
           return;
         }
         setDiffResults(res.data);
-        setApprovedItems(new Set(res.data.map((_, i) => i)));
+        // 取り込まない行（掲載会社管理番号が空など）は最初から外し、選べないようにする。
+        setApprovedItems(new Set(res.data.flatMap((d, i) => (d.type === "skip" ? [] : [i]))));
         setImportStatus("preview");
       } catch (err) {
         console.error("CSVの解析に失敗:", err);
@@ -228,6 +229,7 @@ export default function PropertyManagement() {
   };
 
   const toggleApproval = (index: number) => {
+    if (diffResults[index]?.type === "skip") return;
     const newSet = new Set(approvedIndices);
     if (newSet.has(index)) newSet.delete(index);
     else newSet.add(index);
@@ -283,7 +285,7 @@ export default function PropertyManagement() {
       <div className="bg-white rounded-2xl border border-reno-line overflow-hidden">
         {/* ------------ 物件種別の切り替え ------------ */}
         <div role="tablist" aria-label="物件種別" className="flex flex-wrap gap-2 px-4 pt-4 bg-reno-bg/60">
-          {(["all", ...Object.keys(PROPERTY_TYPE_LABEL).map(Number)] as ("all" | number)[]).map((code) => {
+          {(["all", ...PROPERTY_TYPE_TAB_ORDER] as ("all" | number)[]).map((code) => {
             const active = filter.syubetu === code;
             return (
               <button
@@ -553,6 +555,10 @@ export default function PropertyManagement() {
                           {diffResults.filter(d => d.type === "update").length}件
                         </li>
                         <li>変更なし：{diffResults.filter(d => d.type === "no_change").length}件</li>
+                        <li>
+                          取り込まない（掲載会社管理番号が空など）：
+                          {diffResults.filter(d => d.type === "skip").length}件
+                        </li>
                         <li className="pt-1">現在チェックが入っている取込対象：{approvedIndices.size}件</li>
                       </ul>
                       <p className="mt-2 text-ink">
@@ -573,7 +579,8 @@ export default function PropertyManagement() {
                       <tr className="bg-reno-bg text-reno-mute-dark font-bold border-b border-reno-line">
                         <th className="p-3 w-10"></th>
                         <th className="p-3">状態</th>
-                        <th className="p-3">物件番号</th>
+                        <th className="p-3">掲載会社管理番号</th>
+                        <th className="p-3">取扱店</th>
                         <th className="p-3">物件名</th>
                         <th className="p-3">価格</th>
                         <th className="p-3">変更箇所</th>
@@ -583,17 +590,19 @@ export default function PropertyManagement() {
                       {diffResults.map((diff, i) => (
                         <tr key={i} className={`${approvedIndices.has(i) ? 'bg-white' : 'bg-reno-bg opacity-60'}`}>
                           <td className="p-3 text-center">
-                            <input type="checkbox" checked={approvedIndices.has(i)} onChange={() => toggleApproval(i)} className="w-4 h-4 rounded border-reno-line text-teal accent-teal" />
+                            <input type="checkbox" checked={approvedIndices.has(i)} disabled={diff.type === 'skip'} onChange={() => toggleApproval(i)} className="w-4 h-4 rounded border-reno-line text-teal accent-teal" />
                           </td>
                           <td className="p-3">
                             {diff.type === 'new' && <span className="text-teal bg-teal/5 px-2 py-1 rounded">新規</span>}
                             {diff.type === 'update' && <span className="text-pink bg-pink/5 px-2 py-1 rounded">変更あり</span>}
                             {diff.type === 'no_change' && <span className="text-reno-mute-dark bg-reno-bg px-2 py-1 rounded">変更なし</span>}
+                            {diff.type === 'skip' && <span className="text-red-800 bg-red-50 px-2 py-1 rounded whitespace-nowrap">取込対象外</span>}
                           </td>
-                          <td className="p-3">{diff.incoming.objMngNo}</td>
+                          <td className="p-3">{diff.incoming.listingCompanyNo || "（空）"}</td>
+                          <td className="p-3">{diff.incoming.agencyName || "—"}</td>
                           <td className={`p-3 ${diff.changes?.includes('物件名') ? 'text-pink' : ''}`}>{diff.incoming.title}</td>
                           <td className={`p-3 ${diff.changes?.includes('価格') ? 'text-pink' : ''}`}>{diff.incoming.priceMan}万円</td>
-                          <td className="p-3 text-reno-mute-dark">{diff.changes?.join(', ') || '-'}</td>
+                          <td className="p-3 text-reno-mute-dark">{diff.skipReason ?? (diff.changes?.join(', ') || '-')}</td>
                         </tr>
                       ))}
                     </tbody>

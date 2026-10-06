@@ -12,7 +12,7 @@
 
 | 列名 | 内容 | 備考 |
 | :--- | :--- | :--- |
-| `objMngNo` | 物件管理番号 | **突合キー。同じ番号で再取込すると上書きされる。** athome の10桁番号がそのまま入る |
+| `objMngNo` | 物件管理番号 | 必須・一意。athome の10桁番号がそのまま入る。突合キーではない（2026-10-06 から）。一致した物件ではCSVの値で書き換わる |
 | `title` | 物件名 | |
 | `priceMan` | 価格 | **万円単位の整数**。`400` = 400万円 |
 | `address` | 所在地 | |
@@ -63,7 +63,7 @@
 | `currentState` | 現況 |
 | `deliveryTiming` | 引渡可能時期 |
 | `transactionType` | 取引態様 |
-| `listingCompanyNo` | 掲載会社管理番号 |
+| `listingCompanyNo` | 掲載会社管理番号。**`agencyName` と組で突合キー。空（「－」「-」を含む）の行は取り込まない** |
 | `publishedOn` | 情報公開日 |
 | `nextUpdateOn` | 次回更新予定日 |
 

@@ -2,7 +2,6 @@
 
 import { revalidatePath } from "next/cache";
 import prisma from "@/lib/prisma";
-import { Prisma } from "@/generated/client";
 import { requireAdmin, requireUser, authErrorMessage } from "@/lib/auth";
 import { reportError } from "@/lib/errors";
 import {
@@ -15,6 +14,8 @@ import { signedImageUrls, toDisplayUrls } from "@/lib/storage";
 import { parseJapaneseDate } from "@/lib/dates";
 import { toJsonSafe } from "@/lib/json";
 import { blankToNull } from "@/lib/blank";
+import { buildBulkInsert, buildBulkUpdateById } from "@/lib/propertyBulkUpsert";
+import { importKey, planImportMatches } from "@/lib/importMatch";
 import { PROPERTY_FIELDS } from "@/config/propertyFields";
 import {
   PREF_CODE,
@@ -182,131 +183,57 @@ type PropertyRow = {
   agencyLicense: string | null;
 };
 
-/**
- * 一括取込で書き込む列。PropertyRow のキーと過不足なく一致させる。
- *
- * 下の型チェックにより、PropertyRow へ列を足してここへ足し忘れるとビルドが通らない
- * （「DBには列があるのに取込では入らない」を防ぐ）。
- */
-const PROPERTY_ROW_COLUMNS = [
-  "objMngNo",
-  "syubetu",
-  "syumoku",
-  "title",
-  "priceMan",
-  "madori",
-  "landMen",
-  "bldMen",
-  "bldStructure",
-  "bldY",
-  "bldM",
-  "address",
-  "prefCd",
-  "cityCd",
-  "disclosureLevel",
-  "currentState",
-  "trafficNote",
-  "trafficLine",
-  "trafficStation",
-  "walkMinutes",
-  "leaseTermRent",
-  "keyMoney",
-  "depositGuarantee",
-  "maintenanceCost",
-  "otherLumpSum",
-  "floorsInfo",
-  "parking",
-  "landRight",
-  "deliveryTiming",
-  "transactionType",
-  "listingCompanyNo",
-  "publishedOn",
-  "nextUpdateOn",
-  "mgmtFeeYen",
-  "repairFundYen",
-  "totalUnits",
-  "floorNo",
-  "direction",
-  "balconyMen",
-  "mgmtForm",
-  "buildingCoverage",
-  "floorAreaRatio",
-  "zoning",
-  "landCategory",
-  "cityPlanning",
-  "roadAccess",
-  "privateRoad",
-  "agencyName",
-  "agencyAddress",
-  "agencyTel",
-  "agencyLicense",
-] as const satisfies readonly (keyof PropertyRow)[];
-
-// PROPERTY_ROW_COLUMNS に載っていない PropertyRow のキーがあれば、この行が型エラーになる。
-const _everyPropertyRowColumnListed: Exclude<
-  keyof PropertyRow,
-  (typeof PROPERTY_ROW_COLUMNS)[number]
-> extends never
-  ? true
-  : never = true;
-void _everyPropertyRowColumnListed;
-
-/**
- * 1文にまとめる行数。
- *
- * 【なぜ必要か】2026-09-01、90件の取込が「取込に失敗しました」で全て失敗した。
- * 原因は1件ずつ upsert を投げていたこと。DBとの往復が件数分だけ積み上がる。
- * 本番はアプリが iad1（米バージニア）、DBが東京にあり1往復に0.15秒ほどかかるため、
- * 90件では Prisma の対話型トランザクションの既定上限5秒を超え、
- * P2028（Transaction not found）で1件も書き込めずに終わっていた。
- * 数件の取込では上限内に収まるため、件数が増えて初めて表面化した。
- *
- * 1文に複数行を積み、往復回数を件数に比例させない。
- * 1文あたりのパラメータは 52個（51列＋updatedAt）× 40行 ＝ 2,080 個で、
- * PostgreSQL の上限 65,535 に十分収まる。
- */
-const UPSERT_CHUNK_SIZE = 40;
-
-/**
- * 複数行をまとめて INSERT ... ON CONFLICT する1文を組み立てる。
- * 意味は Prisma の upsert と同じ（objMngNo が既にあれば更新、無ければ追加）。
- *
- * 列名は上の定数からだけ作り、値は必ずプレースホルダで渡す（値を文字列連結しない）。
- * updatedAt は @updatedAt が効かないためここで明示的に入れる。
- * createdAt はDB側の既定値（CURRENT_TIMESTAMP）に任せ、更新時は触らない。
- */
-function buildUpsertSql(chunk: PropertyRow[], now: Date) {
-  const columns = Prisma.join(
-    PROPERTY_ROW_COLUMNS.map((column) => Prisma.raw(`"${column}"`))
-  );
-  const values = Prisma.join(
-    chunk.map(
-      (row) =>
-        Prisma.sql`(${Prisma.join(
-          PROPERTY_ROW_COLUMNS.map((column) => row[column])
-        )}, ${now})`
-    )
-  );
-  const assignments = Prisma.join(
-    PROPERTY_ROW_COLUMNS.filter((column) => column !== "objMngNo").map((column) =>
-      Prisma.raw(`"${column}" = EXCLUDED."${column}"`)
-    )
-  );
-
-  return Prisma.sql`
-    INSERT INTO "Property" (${columns}, "updatedAt")
-    VALUES ${values}
-    ON CONFLICT ("objMngNo") DO UPDATE SET ${assignments}, "updatedAt" = ${now}
-  `;
-}
-
 export type DiffResult = {
-  type: "new" | "update" | "no_change";
+  /** skip は取り込まない行（掲載会社管理番号が空など）。理由は skipReason */
+  type: "new" | "update" | "no_change" | "skip";
   /** objMngNo は BigInt のままだと画面へ渡せないため文字列で返す。 */
   current?: { objMngNo: string; title: string; priceMan: number } | null;
   incoming: IncomingProperty;
   changes?: string[];
+  skipReason?: string;
 };
+
+/** 取り込まない理由。null なら取り込める。判定は取込前の確認と取込本体の両方がここを通る（D-09）。 */
+function skipReasonOf(item: IncomingProperty): string | null {
+  if (importKey(item.agencyName, item.listingCompanyNo) === null) {
+    return "掲載会社管理番号が空";
+  }
+  if (parseObjMngNo(item.objMngNo) === null) return "物件管理番号が数値でない";
+  return null;
+}
+
+/**
+ * 取込行を既存物件と突き合わせる（取込前の確認と取込本体で共用。D-09）。
+ * 突合キーは「取扱不動産会社名＋掲載会社管理番号」。判定は src/lib/importMatch.ts。
+ *
+ * @param items skipReasonOf が null の行だけを渡す
+ * @returns 行ごとに、上書きする既存物件（新規なら null）
+ */
+async function matchWithExisting(items: IncomingProperty[]) {
+  const incoming = items.map((item, i) => ({
+    key: importKey(item.agencyName, item.listingCompanyNo) as string,
+    objMngNo: parseObjMngNo(item.objMngNo) as bigint,
+    label: `${i + 1}件目 掲載会社管理番号 ${item.listingCompanyNo?.trim() ?? ""}`,
+  }));
+  // 同じ番号を持つ物件と、同じ物件管理番号を持つ物件をまとめて1回で引く。
+  // 会社名の一致は importKey で判定する（表記の前後空白を同じ規則でそろえるため）。
+  const listingNos = [...new Set(items.map((item) => (item.listingCompanyNo ?? "").trim()))];
+  const existingRows = await prisma.property.findMany({
+    where: {
+      OR: [
+        { listingCompanyNo: { in: listingNos } },
+        { objMngNo: { in: incoming.map((row) => row.objMngNo) } },
+      ],
+    },
+  });
+  const plan = planImportMatches(incoming, existingRows);
+  if (!plan.ok) return plan;
+  const byId = new Map(existingRows.map((row) => [row.id, row]));
+  return {
+    ok: true as const,
+    matches: plan.matchedIds.map((id) => (id === null ? null : (byId.get(id) ?? null))),
+  };
+}
 
 /**
  * 一般公開用の物件一覧。
@@ -514,33 +441,25 @@ export async function compareCSVData(csvData: IncomingProperty[]) {
   }
 
   try {
-    const results: DiffResult[] = [];
+    // 取り込めない行は先に分け、画面に理由つきで出す（黙って捨てない）。
+    const importable = csvData.filter((item) => skipReasonOf(item) === null);
+    // 突合対象は1回の問い合わせでまとめて引く。
+    // 以前は1行ごとに findUnique していたため、959行のCSVで959往復していた。
+    const matched = importable.length > 0 ? await matchWithExisting(importable) : { ok: true as const, matches: [] };
+    if (!matched.ok) {
+      return { success: false as const, error: matched.error };
+    }
+    const matchOf = new Map(importable.map((item, i) => [item, matched.matches[i]]));
 
-    // 1行ずつ findUnique を投げると、DBとの往復が行数分だけ積み上がる。
-    // 90件で約23秒かかっていた（取込本体と同じ原因。UPSERT_CHUNK_SIZE の説明を参照）。
-    // 照合に必要な既存データは1回でまとめて引く。
-    const objMngNos = csvData
-      .map((item) => parseObjMngNo(item.objMngNo))
-      .filter((objMngNo): objMngNo is bigint => objMngNo !== null);
-    const existingRows = await prisma.property.findMany({
-      where: { objMngNo: { in: objMngNos } },
-    });
-    const existingByObjMngNo = new Map(
-      existingRows.map((row) => [row.objMngNo.toString(), row])
-    );
+    const results: DiffResult[] = csvData.map((item) => {
+      const skipReason = skipReasonOf(item);
+      if (skipReason !== null) return { type: "skip", incoming: item, skipReason };
 
-    for (const item of csvData) {
-      const objMngNo = parseObjMngNo(item.objMngNo);
-      if (objMngNo === null) continue;
-
-      const existing = existingByObjMngNo.get(objMngNo.toString());
-
-      if (!existing) {
-        results.push({ type: "new", incoming: item });
-        continue;
-      }
+      const existing = matchOf.get(item);
+      if (!existing) return { type: "new", incoming: item };
 
       const changes: string[] = [];
+      if (existing.objMngNo !== parseObjMngNo(item.objMngNo)) changes.push("物件管理番号");
       if (existing.title !== item.title) changes.push("物件名");
       if (existing.priceMan !== parseInt(item.priceMan ?? "")) changes.push("価格");
       if (existing.address !== item.address) changes.push("所在地");
@@ -548,7 +467,7 @@ export async function compareCSVData(csvData: IncomingProperty[]) {
       if (existing.disclosureLevel !== parseInt(item.disclosureLevel ?? ""))
         changes.push("公開レベル");
 
-      results.push({
+      return {
         type: changes.length > 0 ? "update" : "no_change",
         current: {
           objMngNo: existing.objMngNo.toString(),
@@ -557,8 +476,8 @@ export async function compareCSVData(csvData: IncomingProperty[]) {
         },
         incoming: item,
         changes,
-      });
-    }
+      };
+    });
 
     return {
       success: true as const,
@@ -569,7 +488,7 @@ export async function compareCSVData(csvData: IncomingProperty[]) {
         new: results.filter((r) => r.type === "new").length,
         update: results.filter((r) => r.type === "update").length,
         noChange: results.filter((r) => r.type === "no_change").length,
-        skipped: csvData.length - results.length,
+        skipped: results.filter((r) => r.type === "skip").length,
       },
     };
   } catch (error) {
@@ -586,7 +505,8 @@ export async function compareCSVData(csvData: IncomingProperty[]) {
  *   3. 確認する … 呼び出し側が expectedCount を宣言し、一致しなければ中止
  *
  * D-18：全体を1つのトランザクションで実行する。途中で落ちても中途半端なデータを残さない。
- *       upsert（objMngNo が一意キー）なので、同じ入力での再実行は結果が変わらない（冪等）。
+ *       突合キーは「取扱不動産会社名＋掲載会社管理番号」（src/lib/importMatch.ts）。
+ *       同じ入力で再実行すると、2回目は全行が既存物件の上書きになる（冪等）。
  *
  * @param approvedItems 人間が承認した取込対象
  * @param expectedCount 画面で確認した想定件数。approvedItems の件数と一致しなければ中止する。
@@ -623,6 +543,14 @@ export async function importProperties(
   // まとめて書き込む文では PostgreSQL 自身が拒否するため、ここで先に止める。
   const seenObjMngNos = new Set<string>();
   for (const item of approvedItems) {
+    // 掲載会社管理番号が空の行は取り込まない（2026-10-06 大野の指示）。
+    // 確認画面では選べないようにしているが、直接呼ばれた場合に備えてここでも止める。
+    if (importKey(item.agencyName, item.listingCompanyNo) === null) {
+      return {
+        success: false as const,
+        error: `掲載会社管理番号が空の行があるため、取込を中止しました（物件名: ${item.title ?? "不明"}）。`,
+      };
+    }
     const objMngNo = parseObjMngNo(item.objMngNo);
     const priceMan = parseInt(item.priceMan ?? "");
     if (objMngNo === null || !Number.isInteger(priceMan)) {
@@ -743,39 +671,66 @@ export async function importProperties(
   }
 
   try {
-    const objMngNos = rows.map((r) => r.objMngNo);
+    // 突合：どの行がどの既存物件を上書きするか。判断できない行があれば全体を中止する。
+    const matched = await matchWithExisting(approvedItems);
+    if (!matched.ok) {
+      return { success: false as const, error: `${matched.error}取込を中止しました。` };
+    }
+    const updateRows: PropertyRow[] = [];
+    const updateIds: number[] = [];
+    const insertRows: PropertyRow[] = [];
+    rows.forEach((row, i) => {
+      const existing = matched.matches[i];
+      if (existing) {
+        updateRows.push(row);
+        updateIds.push(existing.id);
+      } else {
+        insertRows.push(row);
+      }
+    });
 
-    const result = await prisma.$transaction(async (tx) => {
-      // D-17 手順2：上書きされる既存レコードの控えを取る
-      const before = await tx.property.findMany({
-        where: { objMngNo: { in: objMngNos } },
-      });
+    // D-17 手順2：上書きされる既存レコードの控え。突合で引いた行をそのまま使う。
+    const before = matched.matches.filter((row): row is NonNullable<typeof row> => row !== null);
 
-      const backup = await tx.propertyImportBackup.create({
+    /**
+     * D-18：控えの作成と全行の書き込みを1つのトランザクションで実行する。
+     *
+     * 【なぜ文の数を最小にするのか】
+     * 行数分の upsert を送る形は、書き方を変えても本番では終わらなかった。
+     *   - 対話型トランザクションは、プーラー（6543番・pgbouncer=true）が接続を
+     *     トランザクション単位で使い回すため維持できず、約16秒で
+     *     P2028「Transaction not found」になった
+     *   - $transaction(配列) に変えると P2028 は出なくなったが、959文の往復が
+     *     終わらず 300 秒で Vercel の関数が打ち切られた
+     * 全行を JSON 1個にまとめ、更新1文＋新規1文で流し込む
+     * （組み立ては src/lib/propertyBulkUpsert.ts）。
+     *
+     * 配列を渡す $transaction は1回の要求としてまとめて送られ、サーバー側で
+     * 1つのトランザクションとして実行される。物件管理番号の一意制約に触れた場合も
+     * 全体が巻き戻る。
+     */
+    const writes = [];
+    if (updateRows.length > 0) {
+      const update = buildBulkUpdateById(updateRows, updateIds);
+      writes.push(prisma.$executeRawUnsafe(update.sql, ...update.values));
+    }
+    if (insertRows.length > 0) {
+      const insert = buildBulkInsert(insertRows);
+      writes.push(prisma.$executeRawUnsafe(insert.sql, ...insert.values));
+    }
+    const [backup] = await prisma.$transaction([
+      prisma.propertyImportBackup.create({
         data: {
           importedBy: auth.email,
           itemCount: rows.length,
           // objMngNo は BigInt。素の JSON.stringify では落ちるため toJsonSafe を通す。
-          // 既存が0件のうちは [] なので通ってしまい、2回目の取込で初めて失敗していた。
           before: toJsonSafe(before) as object,
         },
-      });
-
-      // 1件ずつ upsert すると往復が件数分になり、上限時間を超える（UPSERT_CHUNK_SIZE の説明）。
-      const now = new Date();
-      for (let i = 0; i < rows.length; i += UPSERT_CHUNK_SIZE) {
-        await tx.$executeRaw(
-          buildUpsertSql(rows.slice(i, i + UPSERT_CHUNK_SIZE), now)
-        );
-      }
-
-      return { backupId: backup.id, overwritten: before.length };
-    }, {
-      // 対話型トランザクションの既定上限は5秒。件数が増えても余裕を持たせる
-      // （それでも超えるようなら、往復回数の設計を疑う）。
-      timeout: 60_000,
-      maxWait: 20_000,
-    });
+      }),
+      // 値は全て引数として渡す（SQL文に入力は混ざらない）。
+      ...writes,
+    ]);
+    const result = { backupId: backup.id, overwritten: before.length };
 
     revalidatePath("/admin/properties");
     revalidatePath("/properties");

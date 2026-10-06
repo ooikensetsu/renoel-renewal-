@@ -65,6 +65,16 @@ export const PROPERTY_TYPE_LABEL: Record<number, string> = {
   [PROPERTY_TYPE.MANSION]: "マンション",
 };
 
+/**
+ * 管理画面の物件一覧で、種別タブを並べる順（「すべて」の後ろ）。
+ * 番号順ではなく掲載件数の多い順に近い並び（2026-10-06 大野の指示）。
+ */
+export const PROPERTY_TYPE_TAB_ORDER: readonly PropertyTypeCode[] = [
+  PROPERTY_TYPE.HOUSE,
+  PROPERTY_TYPE.MANSION,
+  PROPERTY_TYPE.LAND,
+];
+
 /** 既定の種別。CSVで syubetu を省略した行に入る。 */
 export const DEFAULT_PROPERTY_TYPE: number = PROPERTY_TYPE.HOUSE;
 
