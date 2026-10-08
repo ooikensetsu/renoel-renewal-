@@ -29,6 +29,13 @@ export const AREAS = [
 
 export type AreaCode = (typeof AREAS)[number]["cityCd"];
 
+/**
+ * 手動登録で物件管理番号を空欄にしたときに自動で付ける番号の始まり（2026-10-08）。
+ * athome の物件番号は10桁（本番の最大は 6,992,475,880）なので、11桁の 9 始まりなら重ならない。
+ * この番号帯の中で最大の番号＋1を付ける。
+ */
+export const MANUAL_OBJ_MNG_NO_START = BigInt("90000000001");
+
 /** 物件種目が空のときに入れる値（CSV取込・手動登録で共用）。 */
 export const DEFAULT_SYUMOKU = "中古";
 

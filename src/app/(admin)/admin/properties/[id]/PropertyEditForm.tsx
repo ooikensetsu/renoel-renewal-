@@ -96,11 +96,11 @@ export default function PropertyEditForm({
         {isNew && (
           <div>
             <label className={labelClass} htmlFor="objMngNo">
-              物件管理番号<span className="text-red-500 ml-1">必須</span>
+              物件管理番号
             </label>
-            <input id="objMngNo" name="objMngNo" type="text" inputMode="numeric" required className={inputClass} />
+            <input id="objMngNo" name="objMngNo" type="text" inputMode="numeric" className={inputClass} />
             <p className="text-xs font-bold text-reno-mute-dark mt-2">
-              athome の物件番号など、数字だけで入力します。登録後は変更できません。
+              athome の物件番号など、数字だけで入力します。空欄なら 90000000001 からの番号を自動で付けます。登録後は変更できません。
             </p>
           </div>
         )}
@@ -164,7 +164,9 @@ export default function PropertyEditForm({
               >
                 <label className={labelClass}>
                   {field.label}
-                  {field.required && <span className="text-red-500 ml-1">必須</span>}
+                  {(field.required || (isNew && field.requiredOnCreate)) && (
+                    <span className="text-red-500 ml-1">必須</span>
+                  )}
                 </label>
                 {field.type === "textarea" ? (
                   <textarea

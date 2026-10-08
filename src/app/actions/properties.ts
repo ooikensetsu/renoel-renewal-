@@ -22,6 +22,7 @@ import {
   DEFAULT_CITY_CODE,
   DEFAULT_PROPERTY_TYPE,
   DEFAULT_SYUMOKU,
+  MANUAL_OBJ_MNG_NO_START,
   areaName,
   isSupportedArea,
   isValidPropertyType,
@@ -957,11 +958,24 @@ export async function updateProperty(id: number, formData: FormData) {
 }
 
 /**
+/** 手動登録用の物件管理番号。専用の番号帯の最大＋1（番号帯が空なら始まりの番号）。 */
+async function nextManualObjMngNo(): Promise<bigint> {
+  const last = await prisma.property.findFirst({
+    where: { objMngNo: { gte: MANUAL_OBJ_MNG_NO_START } },
+    orderBy: { objMngNo: "desc" },
+    select: { objMngNo: true },
+  });
+  return last ? last.objMngNo + BigInt(1) : MANUAL_OBJ_MNG_NO_START;
+}
+
+/**
  * 物件の手動登録（管理者のみ。2026-10-08 大野の指示）。
  *
- * 物件管理番号は必ず手で入力する（大野の決定。自動採番はしない）。
+ * 掲載会社管理番号は必須、物件管理番号は任意（2026-10-08 大野の指示で入れ替えた）。
+ * 物件管理番号が空なら MANUAL_OBJ_MNG_NO_START からの番号帯で自動で付ける。
  * CSV取込と同じく、物件管理番号の重複と「取扱店＋掲載会社管理番号」の重複は登録しない
  * （登録すると、次のCSV取込でどの物件を上書きするか決められなくなる）。
+ * 後で同じ取扱店＋番号の行をCSVで取り込むと、この物件が上書きされ物件管理番号もCSVの値になる。
  */
 export async function createProperty(formData: FormData) {
   const auth = await requireAdmin();
@@ -969,9 +983,10 @@ export async function createProperty(formData: FormData) {
     return { success: false as const, error: authErrorMessage(auth.reason) };
   }
 
-  const objMngNo = parseObjMngNo(formData.get("objMngNo")?.toString());
-  if (objMngNo === null) {
-    return { success: false as const, error: "物件管理番号を数字で入力してください。" };
+  const objMngNoRaw = formData.get("objMngNo")?.toString().trim() ?? "";
+  const inputObjMngNo = objMngNoRaw === "" ? null : parseObjMngNo(objMngNoRaw);
+  if (objMngNoRaw !== "" && inputObjMngNo === null) {
+    return { success: false as const, error: "物件管理番号は数字だけで入力してください（空欄なら自動で付けます）。" };
   }
 
   const form = readPropertyForm(formData);
@@ -979,7 +994,8 @@ export async function createProperty(formData: FormData) {
   const data = form.data;
 
   for (const field of PROPERTY_FIELDS) {
-    if (field.required && (data[field.key] === undefined || data[field.key] === null)) {
+    const mustFill = field.required || field.requiredOnCreate;
+    if (mustFill && (data[field.key] === undefined || data[field.key] === null)) {
       return { success: false as const, error: `${field.label}を入力してください。` };
     }
   }
@@ -991,6 +1007,7 @@ export async function createProperty(formData: FormData) {
   }
 
   try {
+    const objMngNo = inputObjMngNo ?? (await nextManualObjMngNo());
     const sameNo = await prisma.property.findUnique({ where: { objMngNo }, select: { id: true } });
     if (sameNo) {
       return {
@@ -1033,6 +1050,10 @@ export async function createProperty(formData: FormData) {
     revalidatePropertyPages(created.id);
     return { success: true as const, id: created.id };
   } catch (error) {
+    // 自動採番の番号を、同時に登録した別の人が先に使った場合（物件管理番号の一意制約）
+    if ((error as { code?: string })?.code === "P2002") {
+      return { success: false as const, error: "同時に別の物件が登録されたため保存できませんでした。もう一度「物件を登録」を押してください。" };
+    }
     return reportError("createProperty", error, "登録できませんでした。");
   }
 }

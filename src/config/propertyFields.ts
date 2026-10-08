@@ -19,6 +19,8 @@ export type FieldDef = {
   unit?: string;
   /** 空を許さない項目 */
   required?: boolean;
+  /** 手動の新規登録でだけ必須にする項目（既存物件の編集では空のままでも保存できる） */
+  requiredOnCreate?: boolean;
 };
 
 export type FieldGroup = {
@@ -113,7 +115,8 @@ export const PROPERTY_FIELD_GROUPS: FieldGroup[] = [
   {
     title: "掲載情報",
     fields: [
-      { key: "listingCompanyNo", label: "掲載会社管理番号", type: "text" },
+      // 手動登録では必須（2026-10-08 大野の指示）。CSV取込の突合キー（取扱店＋この番号）になるため
+      { key: "listingCompanyNo", label: "掲載会社管理番号", type: "text", requiredOnCreate: true },
       { key: "publishedOn", label: "情報公開日", type: "date" },
       { key: "nextUpdateOn", label: "次回更新予定日", type: "date" },
     ],
