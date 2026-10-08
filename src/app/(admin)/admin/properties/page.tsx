@@ -10,7 +10,7 @@ import AdminPager from "@/components/AdminPager";
 import { paginate, ADMIN_DEFAULT_PER_PAGE } from "@/lib/pagination";
 import {
   Search, Pencil, ImageOff,
-  Upload, Download, X, Check, AlertCircle, Info
+  Upload, Download, X, Check, AlertCircle, Info, Plus
 } from "lucide-react";
 import Link from "next/link";
 import { DISCLOSURE_LEVEL_LABEL } from "@/config/security";
@@ -299,8 +299,13 @@ export default function PropertyManagement() {
             <Download size={18} /> 一括出力 (CSV)
           </button>
           <BulkImageUpload />
-          {/* 「物件登録」ボタンがあったが、リンク先 /admin/properties/new の画面が存在せず
-              404 になっていたため撤去した。新規登録はいまのところ CSV の一括入力で行う。 */}
+          {/* 2026-10-08 手動登録の画面を作り、撤去していた「物件を登録」を戻した */}
+          <Link
+            href="/admin/properties/new"
+            className="bg-ink text-white px-4 py-2.5 rounded-xl flex items-center gap-2 text-sm font-bold hover:bg-teal transition-colors"
+          >
+            <Plus size={18} /> 物件を登録
+          </Link>
         </div>
       </div>
 

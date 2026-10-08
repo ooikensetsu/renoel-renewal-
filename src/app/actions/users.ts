@@ -4,9 +4,11 @@ import { revalidatePath } from "next/cache";
 import prisma from "@/lib/prisma";
 import { requireAdmin, requireUser, authErrorMessage } from "@/lib/auth";
 import { reportError } from "@/lib/errors";
-import { isValidUserStatus } from "@/config/security";
+import bcrypt from "bcryptjs";
+import { isValidUserStatus, ROLE, USER_STATUS, BCRYPT_ROUNDS } from "@/config/security";
 // S-08：長さの上限は config/inputLimits.ts に集約している（D-19）。
 import { INPUT_LIMITS, withinLimit } from "@/config/inputLimits";
+import { parseMemberInput, NEW_MEMBER_TYPE } from "@/lib/memberInput";
 
 /**
  * S-07：ここにある関数は "use server"、つまり公開されたHTTPエンドポイントである。
@@ -114,6 +116,58 @@ export async function updateUserStatus(id: number, status: string) {
     return { success: true as const, data: user };
   } catch (error) {
     return reportError("updateUserStatus", error, "状態を変更できませんでした。");
+  }
+}
+
+/**
+ * 会員の手動登録（管理者のみ。2026-10-08 大野の指示）。
+ *
+ * 電話・来店のお客様を管理者が代わりに登録する。入力チェックはサイト登録と同じ
+ * （src/lib/memberInput.ts）。パスワードは管理者が決めて本人に伝える（大野の決定）。
+ * 登録完了メールは送らない（大野の決定）。誰が登録したかは ActivityLog に残す。
+ * 権限は常に一般会員（role の付与はDB直接操作のみ、という運用を変えない）。
+ */
+export async function createUserByAdmin(formData: FormData) {
+  const auth = await requireAdmin();
+  if (!auth.ok) {
+    return { success: false as const, error: authErrorMessage(auth.reason) };
+  }
+
+  const input = parseMemberInput(formData);
+  if (!input.ok) return { success: false as const, error: input.error };
+  const { email, password, name, tel, zip, address } = input.value;
+
+  try {
+    // 管理者には退会済みかどうかを伝えてよい（サイト登録と違い、在籍の総当たりの心配がない）
+    const existing = await prisma.user.findUnique({ where: { email }, select: { deletedAt: true } });
+    if (existing) {
+      return {
+        success: false as const,
+        error: existing.deletedAt
+          ? "このメールアドレスは削除済みの会員が使っていたため登録できません。"
+          : "このメールアドレスは既に登録されています。",
+      };
+    }
+
+    const created = await prisma.user.create({
+      data: {
+        email,
+        password: await bcrypt.hash(password, BCRYPT_ROUNDS),
+        name,
+        tel,
+        zip,
+        address,
+        role: ROLE.USER,
+        status: USER_STATUS.ACTIVE,
+        memberType: NEW_MEMBER_TYPE,
+        activityLogs: { create: { action: "ADMIN_CREATED", details: `管理画面から登録: ${auth.email}` } },
+      },
+      select: { id: true },
+    });
+    revalidatePath("/admin/users");
+    return { success: true as const, id: created.id };
+  } catch (error) {
+    return reportError("createUserByAdmin", error, "会員を登録できませんでした。");
   }
 }
 

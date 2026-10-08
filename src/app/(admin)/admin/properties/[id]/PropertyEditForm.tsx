@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Save } from "lucide-react";
-import { updateProperty } from "@/app/actions/properties";
+import { createProperty, updateProperty } from "@/app/actions/properties";
 import { PROPERTY_FIELD_GROUPS, type FieldDef } from "@/config/propertyFields";
 import { AREAS } from "@/config/property";
 import { PROPERTY_TYPE_LABEL } from "@/config/property";
@@ -23,27 +24,45 @@ const labelClass =
 const inputClass =
   "w-full px-4 py-3 rounded-2xl border border-reno-line font-bold text-ink focus:border-teal outline-none transition-all";
 
+/**
+ * 物件の編集フォーム。property を渡さないと新規登録になる（2026-10-08 追加）。
+ * 新規登録では物件管理番号の入力欄を出し、区分は「選択してください」から選ばせる
+ * （既定値のまま気付かずに別のエリアで登録するのを防ぐため）。
+ */
 export default function PropertyEditForm({
   property,
 }: {
-  property: Record<string, unknown>;
+  property?: Record<string, unknown>;
 }) {
+  const router = useRouter();
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
 
-  const id = Number(property.id);
+  const isNew = property === undefined;
+  const values = property ?? {};
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setSaving(true);
     setMessage(null);
 
-    const res = await updateProperty(id, new FormData(e.currentTarget));
-    setMessage(
-      res.success
-        ? { ok: true, text: "保存しました。" }
-        : { ok: false, text: res.error || "保存できませんでした。" }
-    );
+    const formData = new FormData(e.currentTarget);
+    if (isNew) {
+      const res = await createProperty(formData);
+      if (res.success) {
+        // 画像の登録は物件詳細で行うため、登録した物件の画面へ移る
+        router.push(`/admin/properties/${res.id}`);
+        return;
+      }
+      setMessage({ ok: false, text: res.error || "登録できませんでした。" });
+    } else {
+      const res = await updateProperty(Number(values.id), formData);
+      setMessage(
+        res.success
+          ? { ok: true, text: "保存しました。" }
+          : { ok: false, text: res.error || "保存できませんでした。" }
+      );
+    }
     setSaving(false);
   }
 
@@ -67,19 +86,30 @@ export default function PropertyEditForm({
           className="bg-ink text-white px-6 py-2 rounded-xl flex items-center gap-2 font-bold hover:bg-teal transition-colors disabled:opacity-50"
         >
           <Save size={18} />
-          {saving ? "保存中…" : "変更を保存"}
+          {saving ? "保存中…" : isNew ? "物件を登録" : "変更を保存"}
         </button>
       </div>
 
       {/* 区分（取込の検証と同じ選択肢しか選べない） */}
       <section className="bg-white p-8 rounded-2xl shadow-sm border border-reno-line space-y-6">
         <h2 className="text-lg font-bold text-ink border-b border-reno-line pb-4">区分</h2>
+        {isNew && (
+          <div>
+            <label className={labelClass} htmlFor="objMngNo">
+              物件管理番号<span className="text-red-500 ml-1">必須</span>
+            </label>
+            <input id="objMngNo" name="objMngNo" type="text" inputMode="numeric" required className={inputClass} />
+            <p className="text-xs font-bold text-reno-mute-dark mt-2">
+              athome の物件番号など、数字だけで入力します。登録後は変更できません。
+            </p>
+          </div>
+        )}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div>
             <label className={labelClass}>公開レベル</label>
             <select
               name="disclosureLevel"
-              defaultValue={String(property.disclosureLevel ?? 0)}
+              defaultValue={String(values.disclosureLevel ?? 0)}
               className={inputClass}
             >
               {Object.entries(DISCLOSURE_LEVEL_LABEL).map(([code, label]) => (
@@ -91,7 +121,8 @@ export default function PropertyEditForm({
           </div>
           <div>
             <label className={labelClass}>物件種別</label>
-            <select name="syubetu" defaultValue={String(property.syubetu ?? 2)} className={inputClass}>
+            <select name="syubetu" defaultValue={isNew ? "" : String(values.syubetu ?? 2)} required className={inputClass}>
+              {isNew && <option value="">選択してください</option>}
               {Object.entries(PROPERTY_TYPE_LABEL).map(([code, label]) => (
                 <option key={code} value={code}>
                   {label}
@@ -101,7 +132,8 @@ export default function PropertyEditForm({
           </div>
           <div>
             <label className={labelClass}>エリア</label>
-            <select name="cityCd" defaultValue={String(property.cityCd ?? "")} className={inputClass}>
+            <select name="cityCd" defaultValue={String(values.cityCd ?? "")} required className={inputClass}>
+              {isNew && <option value="">選択してください</option>}
               {AREAS.map((a) => (
                 <option key={a.cityCd} value={a.cityCd}>
                   {a.name}
@@ -138,7 +170,7 @@ export default function PropertyEditForm({
                   <textarea
                     name={field.key}
                     rows={3}
-                    defaultValue={initialValue(property[field.key], field.type)}
+                    defaultValue={initialValue(values[field.key], field.type)}
                     className={inputClass}
                   />
                 ) : (
@@ -146,7 +178,7 @@ export default function PropertyEditForm({
                     <input
                       type={field.type === "date" ? "date" : "text"}
                       name={field.key}
-                      defaultValue={initialValue(property[field.key], field.type)}
+                      defaultValue={initialValue(values[field.key], field.type)}
                       className={`${inputClass} ${field.unit ? "pr-16" : ""}`}
                     />
                     {field.unit && (

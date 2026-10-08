@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useId } from "react";
-import { Search, UserPlus, Eye, Trash2, RefreshCw, Loader2 } from "lucide-react";
+import { Search, UserPlus, Eye, Trash2, RefreshCw, Loader2, Plus } from "lucide-react";
 import Link from "next/link";
 import { getUsers, deleteUser, createTestUsers } from "@/app/actions/users";
 import AdminPager from "@/components/AdminPager";
@@ -119,6 +119,13 @@ export default function UserManagement() {
           </p>
         </div>
         <div className="flex flex-wrap gap-3">
+          <Link
+            href="/admin/users/new"
+            className="bg-ink text-white px-4 py-2.5 rounded-xl flex items-center gap-2 text-sm font-bold hover:bg-teal transition-colors"
+          >
+            <Plus size={18} />
+            会員を登録
+          </Link>
           <button
             onClick={reload}
             className="bg-white border border-reno-line px-4 py-2.5 rounded-xl flex items-center gap-2 text-sm font-bold text-ink hover:bg-reno-bg transition-colors"

@@ -29,6 +29,9 @@ export const AREAS = [
 
 export type AreaCode = (typeof AREAS)[number]["cityCd"];
 
+/** 物件種目が空のときに入れる値（CSV取込・手動登録で共用）。 */
+export const DEFAULT_SYUMOKU = "中古";
+
 /** 既定のエリア。CSVで cityCd を省略した行に入る。 */
 export const DEFAULT_CITY_CODE = "20217";
 

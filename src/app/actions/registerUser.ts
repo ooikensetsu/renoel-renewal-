@@ -6,44 +6,16 @@ import { reportError } from "@/lib/errors";
 import { sendRegistrationEmail, sendRegistrationAdminNotice } from "@/lib/mail";
 import { ROLE, USER_STATUS, BCRYPT_ROUNDS, RATE_LIMITS } from "@/config/security";
 import { checkRateLimit, clientIp } from "@/lib/rateLimit";
-// S-08：長さの上限と形式の判定は config/inputLimits.ts に集約している（D-19）。
-import { INPUT_LIMITS, isValidEmail, withinLimit } from "@/config/inputLimits";
-
-/** パスワードの最低文字数。 */
-const MIN_PASSWORD_LENGTH = 8;
+import { parseMemberInput, NEW_MEMBER_TYPE } from "@/lib/memberInput";
 
 export async function registerUser(formData: FormData) {
-  const email = formData.get("email")?.toString()?.trim();
-  const password = formData.get("password")?.toString();
-  const passwordConfirm = formData.get("passwordConfirm")?.toString();
-  const name = formData.get("name")?.toString()?.trim();
-  const tel = formData.get("tel")?.toString()?.trim();
-  const zip = formData.get("zip")?.toString()?.trim();
-  const address = formData.get("address")?.toString()?.trim();
-
-  if (!email || !password) {
-    return { success: false as const, error: "メールアドレスとパスワードは必須です" };
+  // 入力チェックは管理画面からの手動登録と共用（src/lib/memberInput.ts）。
+  // 長さの上限と形式の判定は config/inputLimits.ts に集約している（D-19）。
+  const input = parseMemberInput(formData);
+  if (!input.ok) {
+    return { success: false as const, error: input.error };
   }
-  if (!isValidEmail(email)) {
-    return { success: false as const, error: "メールアドレスの形式が正しくありません" };
-  }
-  if (password !== passwordConfirm) {
-    return { success: false as const, error: "パスワードが一致しません" };
-  }
-  if (password.length < MIN_PASSWORD_LENGTH) {
-    return {
-      success: false as const,
-      error: `パスワードは${MIN_PASSWORD_LENGTH}文字以上にしてください`,
-    };
-  }
-  if (
-    !withinLimit(name, INPUT_LIMITS.name) ||
-    !withinLimit(tel, INPUT_LIMITS.tel) ||
-    !withinLimit(zip, INPUT_LIMITS.zip) ||
-    !withinLimit(address, INPUT_LIMITS.address)
-  ) {
-    return { success: false as const, error: "入力された文字数が上限を超えています" };
-  }
+  const { email, password, name, tel, zip, address } = input.value;
 
   // S-08：同一IPからの登録試行を絞る（総当たり・大量アカウント作成の抑止）
   const ip = await clientIp();
@@ -88,7 +60,7 @@ export async function registerUser(formData: FormData) {
         // 会員登録から管理者権限は絶対に付与しない（S-07）
         role: ROLE.USER,
         status: USER_STATUS.ACTIVE,
-        memberType: "MEMBER",
+        memberType: NEW_MEMBER_TYPE,
       },
     });
 
