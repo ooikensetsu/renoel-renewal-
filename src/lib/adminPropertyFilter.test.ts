@@ -19,11 +19,12 @@ function prop(overrides: Partial<FilterableProperty> = {}): FilterableProperty {
     address: "姫路市テスト町1",
     madori: "3LDK",
     areaName: "姫路市",
+    showOnTop: false,
     ...overrides,
   };
 }
 
-const ALL: AdminPropertyFilter = { keyword: "", syubetu: "all", level: "all", agency: "all" };
+const ALL: AdminPropertyFilter = { keyword: "", syubetu: "all", level: "all", agency: "all", top: "all" };
 
 test("指定なしなら全件通る", () => {
   assert.equal(matchesAdminFilter(prop(), ALL), true);
@@ -60,4 +61,12 @@ test("取扱店の選択肢は件数の多い順で、未登録は最後", () =>
     options.map((o) => [o.label, o.count]),
     [["B社", 2], ["A社", 1], ["未登録", 1]]
   );
+});
+
+test("トップ掲載で絞れる（掲載中だけ・掲載していないものだけ）", () => {
+  assert.equal(matchesAdminFilter(prop({ showOnTop: true }), { ...ALL, top: "on" }), true);
+  assert.equal(matchesAdminFilter(prop({ showOnTop: false }), { ...ALL, top: "on" }), false);
+  assert.equal(matchesAdminFilter(prop({ showOnTop: false }), { ...ALL, top: "off" }), true);
+  assert.equal(matchesAdminFilter(prop({ showOnTop: true }), { ...ALL, top: "off" }), false);
+  assert.equal(matchesAdminFilter(prop({ showOnTop: true }), ALL), true);
 });

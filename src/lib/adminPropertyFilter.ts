@@ -16,6 +16,8 @@ export type FilterableProperty = {
   address: string | null;
   madori: string | null;
   areaName?: string | null;
+  /** トップページの「新着物件」に掲載するか */
+  showOnTop: boolean;
 };
 
 /** "all" は指定なし。数値はそれぞれ syubetu / disclosureLevel の値。 */
@@ -25,6 +27,8 @@ export type AdminPropertyFilter = {
   level: "all" | number;
   /** 取扱店名。NO_AGENCY は「取扱店が未登録」 */
   agency: "all" | string;
+  /** トップ掲載。on＝掲載中だけ、off＝掲載していないものだけ（2026-10-08 追加） */
+  top: "all" | "on" | "off";
 };
 
 /** 取扱店が未登録の物件を選ぶための値。実在の会社名と衝突しない文字列にしている。 */
@@ -39,6 +43,7 @@ export function matchesAdminFilter(p: FilterableProperty, f: AdminPropertyFilter
   if (f.syubetu !== "all" && p.syubetu !== f.syubetu) return false;
   if (f.level !== "all" && p.disclosureLevel !== f.level) return false;
   if (f.agency !== "all" && agencyKey(p.agencyName) !== f.agency) return false;
+  if (f.top !== "all" && p.showOnTop !== (f.top === "on")) return false;
 
   const kw = f.keyword.trim().toLowerCase();
   if (kw === "") return true;

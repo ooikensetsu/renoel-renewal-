@@ -74,7 +74,7 @@ export default function PropertyManagement() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // 一覧の絞り込み。判定は src/lib/adminPropertyFilter.ts に集約している。
-  const NO_FILTER: AdminPropertyFilter = { keyword: "", syubetu: "all", level: "all", agency: "all" };
+  const NO_FILTER: AdminPropertyFilter = { keyword: "", syubetu: "all", level: "all", agency: "all", top: "all" };
   const [filter, setFilter] = useState<AdminPropertyFilter>(NO_FILTER);
   // 一括編集の対象。絞り込みを変えたら選択は解く（見えていない物件を書き換えないため）。
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
@@ -85,6 +85,7 @@ export default function PropertyManagement() {
   const searchId = useId();
   const levelId = useId();
   const agencyId = useId();
+  const topId = useId();
 
   const updateFilter = (patch: Partial<AdminPropertyFilter>) => {
     setFilter((prev) => ({ ...prev, ...patch }));
@@ -229,7 +230,11 @@ export default function PropertyManagement() {
     properties.filter((p) => matchesAdminFilter(p, { ...filter, syubetu: code })).length;
 
   const isFiltered =
-    filter.keyword.trim() !== "" || filter.syubetu !== "all" || filter.level !== "all" || filter.agency !== "all";
+    filter.keyword.trim() !== "" ||
+    filter.syubetu !== "all" ||
+    filter.level !== "all" ||
+    filter.agency !== "all" ||
+    filter.top !== "all";
 
   const allVisibleSelected =
     pageProperties.length > 0 && pageProperties.every((p) => selectedIds.has(p.id));
@@ -406,6 +411,21 @@ export default function PropertyManagement() {
                     {o.label}（{o.count}件）
                   </option>
                 ))}
+              </select>
+            </div>
+            <div className="flex items-center gap-2">
+              <label htmlFor={topId} className="text-sm font-bold text-reno-mute-dark">
+                トップ掲載
+              </label>
+              <select
+                id={topId}
+                value={filter.top}
+                onChange={(e) => updateFilter({ top: e.target.value as AdminPropertyFilter["top"] })}
+                className="px-3 py-2.5 rounded-xl border border-reno-line bg-white text-sm font-bold text-ink outline-none focus:border-teal"
+              >
+                <option value="all">すべて</option>
+                <option value="on">掲載中</option>
+                <option value="off">掲載していない</option>
               </select>
             </div>
             {isFiltered && (
