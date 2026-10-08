@@ -4,6 +4,8 @@ import { useState, useEffect, useMemo, useId } from "react";
 import { Search, UserPlus, Eye, Trash2, RefreshCw, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { getUsers, deleteUser, createTestUsers } from "@/app/actions/users";
+import AdminPager from "@/components/AdminPager";
+import { paginate, ADMIN_DEFAULT_PER_PAGE } from "@/lib/pagination";
 
 type User = {
   id: number;
@@ -25,6 +27,8 @@ export default function UserManagement() {
   const [keyword, setKeyword] = useState("");
   const [typeFilter, setTypeFilter] = useState<"all" | "FREE" | "STORE">("all");
   const [statusFilter, setStatusFilter] = useState<"all" | "ACTIVE" | "SUSPENDED">("all");
+  const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(ADMIN_DEFAULT_PER_PAGE);
   const searchId = useId();
   const typeId = useId();
   const statusId = useId();
@@ -97,6 +101,14 @@ export default function UserManagement() {
 
   const isFiltered = keyword.trim() !== "" || typeFilter !== "all" || statusFilter !== "all";
 
+  // ページ分け。絞り込みや表示件数を変えたら1ページ目に戻す。
+  const pager = paginate(visibleUsers.length, String(page), perPage);
+  const pageUsers = visibleUsers.slice(pager.start, pager.end);
+  const changePerPage = (next: number) => {
+    setPerPage(next);
+    setPage(1);
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap justify-between items-end gap-4">
@@ -150,7 +162,7 @@ export default function UserManagement() {
                 id={searchId}
                 type="search"
                 value={keyword}
-                onChange={(e) => setKeyword(e.target.value)}
+                onChange={(e) => { setKeyword(e.target.value); setPage(1); }}
                 placeholder="氏名・メールアドレスで検索"
                 className="pl-11 pr-4 py-2.5 rounded-xl border border-reno-line bg-white text-sm w-72 outline-none focus:border-teal"
               />
@@ -160,7 +172,7 @@ export default function UserManagement() {
               <select
                 id={typeId}
                 value={typeFilter}
-                onChange={(e) => setTypeFilter(e.target.value as typeof typeFilter)}
+                onChange={(e) => { setTypeFilter(e.target.value as typeof typeFilter); setPage(1); }}
                 className="px-3 py-2.5 rounded-xl border border-reno-line bg-white text-sm font-bold text-ink outline-none focus:border-teal"
               >
                 <option value="all">すべて</option>
@@ -173,7 +185,7 @@ export default function UserManagement() {
               <select
                 id={statusId}
                 value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
+                onChange={(e) => { setStatusFilter(e.target.value as typeof statusFilter); setPage(1); }}
                 className="px-3 py-2.5 rounded-xl border border-reno-line bg-white text-sm font-bold text-ink outline-none focus:border-teal"
               >
                 <option value="all">すべて</option>
@@ -183,7 +195,7 @@ export default function UserManagement() {
             </div>
             {isFiltered && (
               <button
-                onClick={() => { setKeyword(""); setTypeFilter("all"); setStatusFilter("all"); }}
+                onClick={() => { setKeyword(""); setTypeFilter("all"); setStatusFilter("all"); setPage(1); }}
                 className="text-sm font-bold text-teal hover:underline"
               >
                 絞り込みを解除
@@ -196,6 +208,12 @@ export default function UserManagement() {
         </div>
 
         {/* ------------ 一覧 ------------ */}
+        {visibleUsers.length > 0 && (
+          <div className="border-b border-reno-line">
+            <AdminPager pager={pager} total={visibleUsers.length} perPage={perPage} unit="名"
+              onPageChange={setPage} onPerPageChange={changePerPage} />
+          </div>
+        )}
         <div className="overflow-x-auto">
           {isLoading && users.length === 0 ? (
             <p className="p-16 text-center text-sm font-bold text-reno-mute-dark">
@@ -222,7 +240,7 @@ export default function UserManagement() {
                 </tr>
               </thead>
               <tbody className="text-sm text-ink divide-y divide-reno-line">
-                {visibleUsers.map((user) => (
+                {pageUsers.map((user) => (
                   <tr key={user.id} className="hover:bg-reno-bg/60 transition-colors">
                     <td className="px-6 py-4">
                       <Link
@@ -286,6 +304,12 @@ export default function UserManagement() {
             </table>
           )}
         </div>
+        {visibleUsers.length > 0 && (
+          <div className="border-t border-reno-line">
+            <AdminPager pager={pager} total={visibleUsers.length} perPage={perPage} unit="名"
+              onPageChange={setPage} onPerPageChange={changePerPage} />
+          </div>
+        )}
       </div>
     </div>
   );

@@ -6,6 +6,8 @@ import { blankToNull } from "@/lib/blank";
 import BulkImageUpload from "./BulkImageUpload";
 import BulkDisclosureBar from "./BulkDisclosureBar";
 import DisclosureBadge from "@/components/DisclosureBadge";
+import AdminPager from "@/components/AdminPager";
+import { paginate, ADMIN_DEFAULT_PER_PAGE } from "@/lib/pagination";
 import {
   Search, Pencil, ImageOff,
   Upload, Download, X, Check, AlertCircle, Info
@@ -76,6 +78,9 @@ export default function PropertyManagement() {
   const [filter, setFilter] = useState<AdminPropertyFilter>(NO_FILTER);
   // 一括編集の対象。絞り込みを変えたら選択は解く（見えていない物件を書き換えないため）。
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  // ページ分け。ページや表示件数を変えたときも選択は解く（別ページの物件を書き換えないため）。
+  const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(ADMIN_DEFAULT_PER_PAGE);
   const [notice, setNotice] = useState("");
   const searchId = useId();
   const levelId = useId();
@@ -84,6 +89,7 @@ export default function PropertyManagement() {
   const updateFilter = (patch: Partial<AdminPropertyFilter>) => {
     setFilter((prev) => ({ ...prev, ...patch }));
     setSelectedIds(new Set());
+    setPage(1);
   };
 
   // 取得だけを行う（useEffect の同期本体で setState しないため分けている）
@@ -206,6 +212,17 @@ export default function PropertyManagement() {
     () => properties.filter((p) => matchesAdminFilter(p, filter)),
     [properties, filter]
   );
+  const pager = paginate(visibleProperties.length, String(page), perPage);
+  const pageProperties = visibleProperties.slice(pager.start, pager.end);
+  const changePage = (next: number) => {
+    setPage(next);
+    setSelectedIds(new Set());
+  };
+  const changePerPage = (next: number) => {
+    setPerPage(next);
+    setPage(1);
+    setSelectedIds(new Set());
+  };
   const agencyChoices = useMemo(() => agencyOptions(properties), [properties]);
   // 種別タブの件数。種別以外の絞り込みは効かせたまま数える。
   const countBySyubetu = (code: "all" | number) =>
@@ -215,9 +232,9 @@ export default function PropertyManagement() {
     filter.keyword.trim() !== "" || filter.syubetu !== "all" || filter.level !== "all" || filter.agency !== "all";
 
   const allVisibleSelected =
-    visibleProperties.length > 0 && visibleProperties.every((p) => selectedIds.has(p.id));
+    pageProperties.length > 0 && pageProperties.every((p) => selectedIds.has(p.id));
   const toggleAllVisible = () => {
-    setSelectedIds(allVisibleSelected ? new Set() : new Set(visibleProperties.map((p) => p.id)));
+    setSelectedIds(allVisibleSelected ? new Set() : new Set(pageProperties.map((p) => p.id)));
   };
   const toggleSelected = (id: number) => {
     const next = new Set(selectedIds);
@@ -410,6 +427,12 @@ export default function PropertyManagement() {
         />
 
         {/* ------------ 一覧 ------------ */}
+        {!isLoading && visibleProperties.length > 0 && (
+          <div className="border-b border-reno-line">
+            <AdminPager pager={pager} total={visibleProperties.length} perPage={perPage} unit="件"
+              onPageChange={changePage} onPerPageChange={changePerPage} />
+          </div>
+        )}
         <div className="overflow-x-auto">
           {isLoading ? (
             <p className="p-16 text-center text-sm font-bold text-reno-mute-dark">
@@ -430,7 +453,7 @@ export default function PropertyManagement() {
                   <th scope="col" className="pl-4 pr-1 py-3 w-[4%]">
                     <input
                       type="checkbox"
-                      aria-label="表示中の物件をすべて選択"
+                      aria-label="このページの物件をすべて選択"
                       checked={allVisibleSelected}
                       onChange={toggleAllVisible}
                       className="w-4 h-4 accent-teal"
@@ -448,7 +471,7 @@ export default function PropertyManagement() {
                 </tr>
               </thead>
               <tbody className="text-sm text-ink divide-y divide-reno-line">
-                {visibleProperties.map((prop) => (
+                {pageProperties.map((prop) => (
                   <tr
                     key={prop.id}
                     className={`transition-colors ${selectedIds.has(prop.id) ? "bg-teal/5" : "hover:bg-reno-bg/60"}`}
@@ -547,6 +570,12 @@ export default function PropertyManagement() {
             </table>
           )}
         </div>
+        {!isLoading && visibleProperties.length > 0 && (
+          <div className="border-t border-reno-line">
+            <AdminPager pager={pager} total={visibleProperties.length} perPage={perPage} unit="件"
+              onPageChange={changePage} onPerPageChange={changePerPage} />
+          </div>
+        )}
       </div>
 
       {/* Import Modal */}
