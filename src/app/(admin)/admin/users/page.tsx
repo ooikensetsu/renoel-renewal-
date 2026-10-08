@@ -119,9 +119,10 @@ export default function UserManagement() {
           </p>
         </div>
         <div className="flex flex-wrap gap-3">
+          {/* text-white! の「!」は globals.css の a { color: inherit } に負けないため（無いと黒地に黒文字になる） */}
           <Link
             href="/admin/users/new"
-            className="bg-ink text-white px-4 py-2.5 rounded-xl flex items-center gap-2 text-sm font-bold hover:bg-teal transition-colors"
+            className="bg-ink text-white! px-4 py-2.5 rounded-xl flex items-center gap-2 text-sm font-bold hover:opacity-90 transition-opacity"
           >
             <Plus size={18} />
             会員を登録
