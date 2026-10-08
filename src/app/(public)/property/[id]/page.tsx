@@ -1,13 +1,6 @@
 import Link from "next/link";
 import { isBlankMark } from "@/lib/blank";
 import { getPublicPropertyById } from "@/app/actions/properties";
-import { calculateMonthlyPayment } from "@/lib/loan";
-import {
-  DEFAULT_ANNUAL_RATE_PERCENT,
-  DEFAULT_LOAN_YEARS,
-  DEFAULT_RENOVATION_COST_YEN,
-  MAN_YEN,
-} from "@/config/loan";
 import { COMPANY } from "@/config/company";
 import SignInButton from "@/components/SignInButton";
 import PropertyViewLogger from "./PropertyViewLogger";
@@ -131,12 +124,6 @@ export default async function PropertyDetailPage({
   )
     .filter(([, value]) => !isBlankMark(value))
     .map(([label, value]) => ({ label, value: value as string }));
-  const totalLoanAmountYen = priceMan * MAN_YEN + DEFAULT_RENOVATION_COST_YEN;
-  const monthlyPayment = calculateMonthlyPayment(
-    totalLoanAmountYen,
-    DEFAULT_ANNUAL_RATE_PERCENT,
-    DEFAULT_LOAN_YEARS
-  );
   // 物件画像が1枚も登録されていない場合は、代わりの写真を当てない。
   // 以前は第三者のGitHub Pages上の gallery.jpg を代替に使っていたが、
   // その物件の写真ではないうえ、配信元が消滅している（config/siteImages.ts）。
@@ -251,21 +238,12 @@ export default async function PropertyDetailPage({
             </div>
           </div>
 
-          {/* 右側：価格・ローン・CTA */}
+          {/* 右側：価格・CTA。「リノベ込み月々」の試算は 2026-10-13 に削除（モリシタ版 e284f29 の移植） */}
           <aside className="detailSide">
             <p className="detailSide__price">
               <span className="val">{priceMan.toLocaleString()}</span>
               <span className="unit">万円</span>
             </p>
-
-            <div className="detailSide__loan">
-              リノベ込み月々 <strong className="num">{Math.round(monthlyPayment).toLocaleString()}</strong> 円<br />
-              <span style={{ fontSize: "1.1rem", color: "var(--c-mute-dark)" }}>
-                （物件{priceMan.toLocaleString()}万円＋リノベ
-                {(DEFAULT_RENOVATION_COST_YEN / MAN_YEN).toLocaleString()}万円／金利
-                {DEFAULT_ANNUAL_RATE_PERCENT}%・{DEFAULT_LOAN_YEARS}年）
-              </span>
-            </div>
 
             <div className="detailSide__btns">
               <Link href={`/property/${property.id}/contact`} className="btn btn--fill btn--block">見学予約・お問い合わせ</Link>
