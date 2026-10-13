@@ -384,11 +384,8 @@ export async function getPublicPropertyById(id: number) {
         currentState: p.currentState,
         images: await toDisplayUrls(p.images.map((img) => img.path)),
 
-        // 物件概要。取扱店（agency*）も返す（大野の指示：管理画面と同じ情報をお客様も見られるように）。
-        agencyName: p.agencyName,
-        agencyAddress: p.agencyAddress,
-        agencyTel: p.agencyTel,
-        agencyLicense: p.agencyLicense,
+        // 物件概要。取扱店（agency*）は返さない（2026-10-13 大野の指示でサイトから削除）。
+        // 画面で隠すだけではソースから読めるため、サーバーから渡さない。
         trafficNote: p.trafficNote,
         trafficLine: p.trafficLine,
         trafficStation: p.trafficStation,

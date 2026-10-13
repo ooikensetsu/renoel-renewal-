@@ -69,7 +69,8 @@ export default async function PropertyDetailPage({
   const priceMan = property.priceMan ?? 0;
 
   // 物件概要の追加行。値が入っている項目だけを、athome の表示順に近い並びで出す。
-  // 取扱店（会社名・免許番号など）は宅建業法の表示の扱いが未決定のため、まだ出さない。
+  // 取扱店（会社名・電話番号など）はサイトに出さない（2026-10-13 大野の指示で削除。
+  // サーバーも返さない。src/app/actions/properties.ts の getPublicPropertyById）。
   const specRows = (
     [
       ["交通", property.trafficNote],
@@ -113,17 +114,6 @@ export default async function PropertyDetailPage({
     .filter(([, value]) => !isBlankMark(value))
     .map(([label, value]) => ({ label, value: value as string }));
 
-  // 取扱店。宅建業法の広告表示に関わる項目のため、値が入っていれば必ず出す。
-  const agencyRows = (
-    [
-      ["会社名", property.agencyName],
-      ["所在地", property.agencyAddress],
-      ["電話番号", property.agencyTel],
-      ["免許番号", property.agencyLicense],
-    ] as [string, string | null | undefined][]
-  )
-    .filter(([, value]) => !isBlankMark(value))
-    .map(([label, value]) => ({ label, value: value as string }));
   // 物件画像が1枚も登録されていない場合は、代わりの写真を当てない。
   // 以前は第三者のGitHub Pages上の gallery.jpg を代替に使っていたが、
   // その物件の写真ではないうえ、配信元が消滅している（config/siteImages.ts）。
@@ -215,26 +205,6 @@ export default async function PropertyDetailPage({
                 </tbody>
               </table>
 
-              {agencyRows.length > 0 && (
-                <div style={{ marginTop: "32px" }}>
-                  <h3
-                    className="ja"
-                    style={{ fontSize: "1.25rem", color: "var(--c-ink)", marginBottom: "12px" }}
-                  >
-                    取扱店
-                  </h3>
-                  <table className="specTable">
-                    <tbody>
-                      {agencyRows.map((row) => (
-                        <tr key={row.label}>
-                          <th>{row.label}</th>
-                          <td>{row.value}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
             </div>
           </div>
 
