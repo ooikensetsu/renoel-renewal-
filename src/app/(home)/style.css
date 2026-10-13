@@ -936,23 +936,24 @@ h1, h2, h3, h4, h5, p { margin: 0; }
 }
 
 /* ページ送り（物件一覧。2026-10-13 モリシタ版 30dd52d から移植し、この配色に合わせた）
-   押せる部分は 44px 四方を確保する（スマホで押しやすい高さ）。 */
-.pagerInfo{text-align:center;margin:0 0 20px;font-size:13px;color:var(--gray)}
-.pager{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:8px;margin-top:40px}
-.pager__nums{display:flex;flex-wrap:wrap;justify-content:center;gap:6px;list-style:none;margin:0;padding:0}
-.pager a{
+   押せる部分は 44px 四方を確保する（スマホで押しやすい高さ）。
+   globals.css に別の .pager があるため名前を分けている。 */
+.propPagerInfo{text-align:center;margin:0 0 20px;font-size:13px;color:var(--gray)}
+.propPager{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:8px;margin-top:40px}
+.propPager__nums{display:flex;flex-wrap:wrap;justify-content:center;gap:6px;list-style:none;margin:0;padding:0}
+.propPager a{
   display:inline-flex;align-items:center;justify-content:center;
   min-width:44px;min-height:44px;padding:0 10px;
   border:1px solid var(--line);background:#fff;
   font-size:14px;color:var(--ink);letter-spacing:0;font-variant-numeric:tabular-nums;
 }
-.pager a:hover{border-color:var(--navy);color:var(--navy)}
-.pager a[aria-current="page"]{background:var(--navy);border-color:var(--navy);color:#fff;font-weight:700}
-.pager__step{min-width:64px}
-.pager__gap{display:flex;align-items:center;padding:0 2px;color:var(--gray-l)}
+.propPager a:hover{border-color:var(--navy);color:var(--navy)}
+.propPager a[aria-current="page"]{background:var(--navy);border-color:var(--navy);color:#fff;font-weight:700}
+.propPager__step{min-width:64px}
+.propPager__gap{display:flex;align-items:center;padding:0 2px;color:var(--gray-l)}
 @media screen and (max-width:560px){
-  .pager,.pager__nums{gap:4px}
-  .pager a{min-width:40px;padding:0 8px}
-  .pager__nums{order:1;width:100%}
-  .pager__step{order:2;flex:1;min-width:0}
+  .propPager,.propPager__nums{gap:4px}
+  .propPager a{min-width:40px;padding:0 8px}
+  .propPager__nums{order:1;width:100%}
+  .propPager__step{order:2;flex:1;min-width:0}
 }

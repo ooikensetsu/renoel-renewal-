@@ -96,7 +96,7 @@ export default async function PropertiesPage({
           ) : (
             <>
             {pager.totalPages > 1 && (
-              <p className="pagerInfo">
+              <p className="propPagerInfo">
                 全{total}件中 {pager.start + 1}〜{pager.end}件目（{pager.page}／{pager.totalPages}ページ）
               </p>
             )}
@@ -174,18 +174,18 @@ function Pager({
 }) {
   if (totalPages <= 1) return null;
   return (
-    <nav className="pager" aria-label="ページ送り">
+    <nav className="propPager" aria-label="ページ送り">
       {page > 1 ? (
-        <Link className="pager__step" href={href(page - 1)} rel="prev">
+        <Link className="propPager__step" href={href(page - 1)} rel="prev">
           前へ
         </Link>
       ) : (
-        <span className="pager__step" aria-hidden="true" />
+        <span className="propPager__step" aria-hidden="true" />
       )}
-      <ol className="pager__nums">
+      <ol className="propPager__nums">
         {pageNumbers(page, totalPages).map((n, i) =>
           n === null ? (
-            <li key={`gap-${i}`} className="pager__gap" aria-hidden="true">
+            <li key={`gap-${i}`} className="propPager__gap" aria-hidden="true">
               …
             </li>
           ) : (
@@ -198,11 +198,11 @@ function Pager({
         )}
       </ol>
       {page < totalPages ? (
-        <Link className="pager__step" href={href(page + 1)} rel="next">
+        <Link className="propPager__step" href={href(page + 1)} rel="next">
           次へ
         </Link>
       ) : (
-        <span className="pager__step" aria-hidden="true" />
+        <span className="propPager__step" aria-hidden="true" />
       )}
     </nav>
   );
