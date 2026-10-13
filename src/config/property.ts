@@ -42,6 +42,13 @@ export const DEFAULT_SYUMOKU = "中古";
 /** 既定のエリア。CSVで cityCd を省略した行に入る。 */
 export const DEFAULT_CITY_CODE = "20217";
 
+/**
+ * 物件一覧の1ページあたりの件数。3列（PC）・2列・1列（スマホ）のどれでも割り切れる数にしている。
+ * モリシタ版で全件（959件）を1ページに出し、スマホでページの長さが約21万pxになった
+ * ため導入した（2026-09-28）。RENOEL へは 2026-10-13 に移植。
+ */
+export const PROPERTIES_PER_PAGE = 24;
+
 /** 市区町村コードから名称を引く。未登録なら null。 */
 export function areaName(cityCd: string): string | null {
   return AREAS.find((a) => a.cityCd === cityCd)?.name ?? null;

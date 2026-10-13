@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getPublicProperties } from "@/app/actions/properties";
-import { AREAS, areaName, isSupportedArea } from "@/config/property";
+import { AREAS, areaName, isSupportedArea, PROPERTIES_PER_PAGE } from "@/config/property";
+import { paginate, pageNumbers } from "@/lib/pagination";
 import { siteImage } from "@/config/siteImages";
 
 /**
@@ -10,19 +11,32 @@ import { siteImage } from "@/config/siteImages";
  * ソース中の配列に持っていた。「価格非公開」と表示していても、
  * 開発者ツールやページソースから価格・所在地がそのまま読めていた。
  * いまは getPublicProperties() が、未ログインには秘匿項目を含まないデータだけを返す。
+ *
+ * 2026-10-13 から PROPERTIES_PER_PAGE 件ずつのページ分け（?page=。モリシタ版 30dd52d の移植）。
+ * 取得は全件のまま、表示する分だけをここで切り出す。
  */
 export const dynamic = "force-dynamic";
 
 export default async function PropertiesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ city?: string }>;
+  searchParams: Promise<{ city?: string; page?: string }>;
 }) {
-  const { city } = await searchParams;
+  const { city, page: pageParam } = await searchParams;
   // 掲載対象のエリアでなければ絞り込まない（不正なコードで空一覧にしない）
   const selectedArea = city && isSupportedArea(city) ? areaName(city) : null;
   const result = await getPublicProperties(selectedArea ? city : undefined);
   const galleryImage = siteImage("gallery");
+  const total = result.success ? result.data.length : 0;
+  const pager = paginate(total, pageParam, PROPERTIES_PER_PAGE);
+  // 絞り込み中のエリアはページを替えても引き継ぐ
+  const pageHref = (n: number) => {
+    const params = new URLSearchParams();
+    if (selectedArea && city) params.set("city", city);
+    if (n > 1) params.set("page", String(n));
+    const query = params.toString();
+    return query ? `/properties?${query}` : "/properties";
+  };
 
   return (
     <>
@@ -80,8 +94,14 @@ export default async function PropertiesPage({
                 : "現在公開中の物件はありません。"}
             </p>
           ) : (
+            <>
+            {pager.totalPages > 1 && (
+              <p className="pagerInfo">
+                全{total}件中 {pager.start + 1}〜{pager.end}件目（{pager.page}／{pager.totalPages}ページ）
+              </p>
+            )}
             <div className="propGrid">
-              {result.data.map((property) => {
+              {result.data.slice(pager.start, pager.end).map((property) => {
                 // 鍵つき（会員限定 × 未ログイン）。この分岐に入るとき、
                 // property には価格も所在地も画像も入っていない。
                 if (property.locked) {
@@ -133,9 +153,57 @@ export default async function PropertiesPage({
                 );
               })}
             </div>
+            <Pager page={pager.page} totalPages={pager.totalPages} href={pageHref} />
+            </>
           )}
         </div>
       </section>
     </>
+  );
+}
+
+/** ページ送り。番号の並べ方は src/lib/pagination.ts の pageNumbers。 */
+function Pager({
+  page,
+  totalPages,
+  href,
+}: {
+  page: number;
+  totalPages: number;
+  href: (n: number) => string;
+}) {
+  if (totalPages <= 1) return null;
+  return (
+    <nav className="pager" aria-label="ページ送り">
+      {page > 1 ? (
+        <Link className="pager__step" href={href(page - 1)} rel="prev">
+          前へ
+        </Link>
+      ) : (
+        <span className="pager__step" aria-hidden="true" />
+      )}
+      <ol className="pager__nums">
+        {pageNumbers(page, totalPages).map((n, i) =>
+          n === null ? (
+            <li key={`gap-${i}`} className="pager__gap" aria-hidden="true">
+              …
+            </li>
+          ) : (
+            <li key={n}>
+              <Link href={href(n)} aria-current={n === page ? "page" : undefined} aria-label={`${n}ページ目`}>
+                {n}
+              </Link>
+            </li>
+          )
+        )}
+      </ol>
+      {page < totalPages ? (
+        <Link className="pager__step" href={href(page + 1)} rel="next">
+          次へ
+        </Link>
+      ) : (
+        <span className="pager__step" aria-hidden="true" />
+      )}
+    </nav>
   );
 }
