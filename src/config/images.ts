@@ -35,3 +35,12 @@ export const CONTENT_TYPES: Record<string, string> = {
 
 /** 人が読める上限の表記（画面の案内文用）。 */
 export const MAX_FILE_LABEL = "5MB";
+
+/**
+ * athome 取得画像の一括登録（scripts/upload-athome-images.mjs）で縮小・再圧縮するときの設定（2026-10-13）。
+ * 原本は最大640pxなので、長辺640pxは実質「拡大しない」の意味。画質だけ70に揃える。
+ * モリシタ版は2万枚超のため 480px・画質55 にしたが、RENOEL は約4,300枚で容量に余裕がある
+ * （1枚およそ40〜60KB → 合計約200〜260MB の見込み・推定）ため、詳細ページでの粗さを避けて原寸を保つ。
+ */
+export const BULK_RESIZE_MAX_PX = 640;
+export const BULK_JPEG_QUALITY = 70;
