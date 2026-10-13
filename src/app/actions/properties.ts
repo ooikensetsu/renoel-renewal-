@@ -266,7 +266,9 @@ export async function getPublicProperties(
       // 非表示の物件はサイトに出さない。条件の中身は src/config/security.ts の1箇所。
       where: { ...where, ...SITE_VISIBLE_WHERE, ...(options.onlyTop ? { showOnTop: true } : {}) },
       orderBy: { updatedAt: "desc" },
-      include: { images: { orderBy: { sortOrder: "asc" } } },
+      // 一覧のカードは1枚目しか使わないため、1枚目だけを取る（2026-10-13）。
+      // 全画像（279物件で4,503枚）を1回の署名リクエストに載せると失敗し、一覧の画像が全部消えた。
+      include: { images: { orderBy: { sortOrder: "asc" }, take: 1 } },
       ...(Number.isInteger(limit) && (limit as number) > 0 ? { take: limit } : {}),
     });
 
