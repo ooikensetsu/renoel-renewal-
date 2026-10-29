@@ -1,5 +1,6 @@
 import { getAgencyList } from "@/app/actions/agencies";
 import AgencyListTable from "./AgencyListTable";
+import AgencySubNav from "@/components/AgencySubNav";
 
 /**
  * 取扱会社の一覧（2026-10-22）。会社ごとに会社情報と掲載物件を管理し、表記ゆれを1社へ統合する。
@@ -10,6 +11,7 @@ export default async function AdminAgenciesPage() {
 
   return (
     <div className="space-y-8">
+      <AgencySubNav current="list" />
       <div>
         <h1 className="text-2xl font-bold text-ink mb-2">取扱会社</h1>
         <p className="text-sm text-reno-mute-dark">

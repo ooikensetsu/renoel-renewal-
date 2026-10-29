@@ -1,5 +1,6 @@
 import { getAgencyReadings } from "@/app/actions/agencyReadings";
 import AgencyReadingTable from "./AgencyReadingTable";
+import AgencySubNav from "@/components/AgencySubNav";
 
 /**
  * 取扱会社名の読みの登録（2026-10-19）。
@@ -10,6 +11,7 @@ export default async function AdminAgencyReadingsPage() {
 
   return (
     <div className="space-y-8">
+      <AgencySubNav current="readings" />
       <div>
         <h1 className="text-2xl font-bold text-ink mb-2">取扱会社の読み</h1>
         <p className="text-sm text-reno-mute-dark">

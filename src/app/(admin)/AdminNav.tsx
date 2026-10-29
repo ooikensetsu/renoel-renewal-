@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
 import {
   LayoutDashboard, Users, Building2, MessageSquare, MailWarning,
-  ExternalLink, LogOut, ArrowDownAZ, Briefcase,
+  ExternalLink, LogOut, Briefcase,
 } from "lucide-react";
 
 /**
@@ -20,8 +20,8 @@ const ITEMS = [
   { href: "/admin", label: "ダッシュボード", icon: LayoutDashboard },
   { href: "/admin/users", label: "会員管理", icon: Users },
   { href: "/admin/properties", label: "物件管理", icon: Building2 },
-  { href: "/admin/agencies", label: "取扱会社", icon: Briefcase },
-  { href: "/admin/agency-readings", label: "取扱会社の読み", icon: ArrowDownAZ },
+  // 読みの登録（/admin/agency-readings）は取扱会社の画面の中のタブにまとめた（2026-10-22）
+  { href: "/admin/agencies", label: "取扱会社", icon: Briefcase, also: ["/admin/agency-readings"] },
   { href: "/admin/inquiries", label: "お問い合わせ管理", icon: MessageSquare },
   { href: "/admin/mail-logs", label: "メール送信ログ", icon: MailWarning },
 ];
@@ -30,14 +30,14 @@ export default function AdminNav({ unreadInquiries }: { unreadInquiries: number 
   const pathname = usePathname();
 
   // 「/admin」は完全一致で見る。前方一致にすると全ページで選択中になる。
-  const isCurrent = (href: string) =>
-    href === "/admin" ? pathname === "/admin" : pathname.startsWith(href);
+  const isCurrent = (href: string, also: readonly string[] = []) =>
+    href === "/admin" ? pathname === "/admin" : [href, ...also].some((h) => pathname.startsWith(h));
 
   return (
     <>
       <nav className="flex-grow px-4 space-y-1" aria-label="管理メニュー">
-        {ITEMS.map(({ href, label, icon: Icon }) => {
-          const current = isCurrent(href);
+        {ITEMS.map(({ href, label, icon: Icon, also }) => {
+          const current = isCurrent(href, also);
           return (
             <Link
               key={href}

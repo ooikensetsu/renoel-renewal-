@@ -325,7 +325,7 @@ export default function PropertyManagement() {
     setErrorMessage("");
     setNotice(
       summary +
-        (unread > 0 ? `読みが未登録の${unread}社は最後に会社名順で並べています（「取扱会社の読み」で登録できます）。` : "") +
+        (unread > 0 ? `読みが未登録の${unread}社は最後に会社名順で並べています（「取扱会社」の「読みの登録」で登録できます）。` : "") +
         (skipped > 0 ? `取扱会社が未登録の${skipped}件は含めていません。` : "")
     );
   };
