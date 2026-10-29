@@ -6,6 +6,7 @@ import Link from "next/link";
 import { getUsers, deleteUser, createTestUsers } from "@/app/actions/users";
 import AdminPager from "@/components/AdminPager";
 import { paginate, ADMIN_DEFAULT_PER_PAGE } from "@/lib/pagination";
+import { loadListState, parseUserListState, saveListState, USER_LIST_STATE_KEY } from "@/lib/adminListState";
 
 type User = {
   id: number;
@@ -57,9 +58,26 @@ export default function UserManagement() {
     setIsLoading(false);
   };
 
+  // 詳細から戻ったときに同じページを開く（2026-10-27）。保存は戻した値が画面に入ってから始める（既定値で上書きしないため）。
+  // ref ではなく state にしている。開発時は effect が2回走り、ref だと戻す前に既定値を保存してしまう。
+  const [isListStateRestored, setIsListStateRestored] = useState(false);
+  useEffect(() => {
+    if (!isListStateRestored) return;
+    saveListState(USER_LIST_STATE_KEY, { filter: { keyword, typeFilter, statusFilter }, page, perPage });
+  }, [keyword, typeFilter, statusFilter, page, perPage, isListStateRestored]);
+
   useEffect(() => {
     // 初期表示。isLoading は初期値が true なので、ここで立て直す必要はない。
     void (async () => {
+      const saved = parseUserListState(loadListState(USER_LIST_STATE_KEY));
+      if (saved) {
+        setKeyword(saved.filter.keyword);
+        setTypeFilter(saved.filter.typeFilter);
+        setStatusFilter(saved.filter.statusFilter);
+        setPage(saved.page);
+        setPerPage(saved.perPage);
+      }
+      setIsListStateRestored(true);
       await fetchUsers();
       setIsLoading(false);
     })();

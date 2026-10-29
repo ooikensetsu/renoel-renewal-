@@ -2,6 +2,12 @@
 
 import { useState, useRef, useEffect, useMemo, useId } from "react";
 import { useSearchParams } from "next/navigation";
+import {
+  loadListState,
+  parsePropertyListState,
+  saveListState,
+  PROPERTY_LIST_STATE_KEY,
+} from "@/lib/adminListState";
 import { parseCsv, decodeCsvBuffer } from "@/lib/csv";
 import { buildPropertyCsv, normalizePropertyCsvRow, propertyCsvHeaderOf } from "@/lib/propertyCsv";
 import {
@@ -163,9 +169,26 @@ export default function PropertyManagement() {
     setIsLoading(false);
   };
 
+  // 詳細から戻ったときに同じページを開く（2026-10-27）。保存は戻した値が画面に入ってから始める（既定値で上書きしないため）。
+  // ref ではなく state にしている。開発時は effect が2回走り、ref だと戻す前に既定値を保存してしまう。
+  // 取扱会社の画面から ?agency= で来たときは、その会社の1ページ目を優先する。
+  const [isListStateRestored, setIsListStateRestored] = useState(false);
+  const isOpenedWithAgency = useRef(Boolean(searchParams.get("agency")));
+  useEffect(() => {
+    if (!isListStateRestored) return;
+    saveListState(PROPERTY_LIST_STATE_KEY, { filter, page, perPage });
+  }, [filter, page, perPage, isListStateRestored]);
+
   useEffect(() => {
     // isLoading の初期値が true なので、ここで立て直さない
     void (async () => {
+      const saved = parsePropertyListState(loadListState(PROPERTY_LIST_STATE_KEY));
+      if (saved && !isOpenedWithAgency.current) {
+        setFilter(saved.filter);
+        setPage(saved.page);
+        setPerPage(saved.perPage);
+      }
+      setIsListStateRestored(true);
       await fetchProperties();
       setIsLoading(false);
     })();
