@@ -1,7 +1,7 @@
 /**
  * 取扱会社の台帳へFAX番号をまとめて入れるときの判定（2026-10-22）。実際に書くのは scripts/import-agency-fax.mjs。
  *
- * 入力は次のどちらか（列名 fax または agencyFax）。
+ * 入力は次のどちらか（会社名の列は agencyName または 取扱会社名、FAXの列は fax または agencyFax）。
  * - athome の物件ページ画像を文字認識して作った候補一覧（人が目で確かめ、違う行を消したもの）
  * - athome 取得ツールの 物件インポート.csv（2026-10-22 から agencyFax 列が付く）
  *
@@ -49,7 +49,7 @@ export function planFaxImport(
   const plan: FaxPlan = { write: [], same: [], differs: [], unknown: [], conflicting: [], invalid: [] };
   const faxesOf = new Map<string, Set<string>>();
   for (const row of rows) {
-    const rawName = agencyNameOf(row.agencyName);
+    const rawName = agencyNameOf(row.agencyName ?? row["取扱会社名"]);
     const rawFax = row.fax ?? row.agencyFax ?? "";
     if (rawName === null || blankToNull(rawFax) === null) continue;
     const fax = normalizeFax(rawFax);

@@ -23,7 +23,7 @@ test("台帳に無い会社は台帳を作り、FAXが空の会社は入れる�
   const plan = planFaxImport(
     [
       { agencyName: "（株）A不動産", fax: "079-000-0001" },
-      { agencyName: "C建設", agencyFax: "079-000-0003" },
+      { 取扱会社名: "C建設", agencyFax: "079-000-0003" },
     ],
     ctx
   );

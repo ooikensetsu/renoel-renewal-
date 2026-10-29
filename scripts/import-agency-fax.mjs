@@ -1,7 +1,7 @@
 /**
  * 取扱会社の台帳（Agency）へFAX番号をまとめて入れる（2026-10-22）。判定は src/lib/agencyFax.ts。
  *
- * 入力CSVの列：agencyName と fax（または agencyFax）。
+ * 入力CSVの列：agencyName（または 取扱会社名）と fax（または agencyFax）。
  *   - athome 画像の文字認識で作った候補一覧（人が確かめ、違う行を消したもの）
  *   - athome 取得ツールの 物件インポート.csv（2026-10-22 から agencyFax 列が付く）
  * 人が台帳に入れたFAXは上書きしない。物件のデータには触らない（FAXは物件へ反映しない項目）。
