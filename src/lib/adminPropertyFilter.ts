@@ -6,6 +6,9 @@
  * 画面に直書きせずここに置いてテスト（adminPropertyFilter.test.ts）で固定する。
  */
 
+// 相対パス＋拡張子つきで書くのは、node の標準テストランナーから読めるようにするため。
+import { transactionCategory, type TransactionCategory } from "../config/property.ts";
+
 /** 絞り込みに使う列だけを持つ形。画面の行型はこれを満たせばよい。 */
 export type FilterableProperty = {
   title: string;
@@ -18,6 +21,8 @@ export type FilterableProperty = {
   areaName?: string | null;
   /** トップページの「新着物件」に掲載するか */
   showOnTop: boolean;
+  /** 取引態様（取得元の表記のまま。2026-10-27 絞り込みに追加） */
+  transactionType?: string | null;
 };
 
 /** "all" は指定なし。数値はそれぞれ syubetu / disclosureLevel の値。 */
@@ -29,6 +34,8 @@ export type AdminPropertyFilter = {
   agency: "all" | string;
   /** トップ掲載。on＝掲載中だけ、off＝掲載していないものだけ（2026-10-08 追加） */
   top: "all" | "on" | "off";
+  /** 取引態様の分類（2026-10-27 追加。分類は src/config/property.ts の TRANSACTION_CATEGORIES） */
+  transaction: "all" | TransactionCategory;
 };
 
 /** 取扱店が未登録の物件を選ぶための値。実在の会社名と衝突しない文字列にしている。 */
@@ -39,11 +46,21 @@ function agencyKey(name: string | null): string {
   return trimmed === "" ? NO_AGENCY : trimmed;
 }
 
+/**
+ * 絞り込み中か。キーワード以外は「すべて」(all) 以外なら絞り込み中とみなす。
+ * 項目を1つずつ並べると、項目を足したときに漏れる（2026-10-27 に取引態様で漏れた）ため、全項目を見る。
+ */
+export function isAdminFilterActive(f: AdminPropertyFilter): boolean {
+  const { keyword, ...rest } = f;
+  return keyword.trim() !== "" || Object.values(rest).some((v) => v !== "all");
+}
+
 export function matchesAdminFilter(p: FilterableProperty, f: AdminPropertyFilter): boolean {
   if (f.syubetu !== "all" && p.syubetu !== f.syubetu) return false;
   if (f.level !== "all" && p.disclosureLevel !== f.level) return false;
   if (f.agency !== "all" && agencyKey(p.agencyName) !== f.agency) return false;
   if (f.top !== "all" && p.showOnTop !== (f.top === "on")) return false;
+  if (f.transaction !== "all" && transactionCategory(p.transactionType) !== f.transaction) return false;
 
   const kw = f.keyword.trim().toLowerCase();
   if (kw === "") return true;

@@ -114,3 +114,39 @@ export function checkDigit(cityCd5: string): number {
   if (remainder === 1) return 0;
   return 11 - remainder;
 }
+
+/**
+ * 物件確認の状況（2026-10-27 大野の指示）。取扱会社へ物件の現況を確かめた結果で、
+ * 物件確認依頼書の「直近確認時の状況」に入れる。選択肢と並びは依頼書の様式の「現在の状況」と同じ。
+ * 確認するたびに PropertyConfirmation へ1行ずつ残し、いちばん新しい行を「直近」とする。
+ */
+export const CONFIRMATION_STATUSES = ["有", "商談", "保留", "中止", "済"] as const;
+export type ConfirmationStatus = (typeof CONFIRMATION_STATUSES)[number];
+
+/** この状況を記録したら公開レベルを「非表示」にする（2026-10-27 大野の指示）。戻すときは自動で戻さない。 */
+export const CONFIRMATION_STATUSES_THAT_HIDE: readonly ConfirmationStatus[] = ["中止", "済"];
+
+export function isConfirmationStatus(value: unknown): value is ConfirmationStatus {
+  return (CONFIRMATION_STATUSES as readonly unknown[]).includes(value);
+}
+
+/**
+ * 取引態様の絞り込みの分類（2026-10-27 大野の指示）。DBの値は取得元の表記のまま持ち、絞り込むときだけ読み替える。
+ * athome は「一般媒介」、REINS は「一般」のように表記が違うため、どちらも同じ分類に入れる。
+ * どれにも当たらない値（athome の「媒介」＝種類の記載なし、「代理」、空欄）は「その他」。
+ */
+export const TRANSACTION_CATEGORIES = [
+  { value: "general", label: "一般媒介", values: ["一般媒介", "一般"] },
+  { value: "exclusive", label: "専任媒介", values: ["専任媒介", "専任"] },
+  { value: "exclusiveSole", label: "専属専任媒介", values: ["専属専任媒介", "専属"] },
+  { value: "seller", label: "売り主", values: ["売主", "売り主"] },
+  { value: "other", label: "その他", values: [] },
+] as const;
+export type TransactionCategory = (typeof TRANSACTION_CATEGORIES)[number]["value"];
+
+/** 取引態様の値を分類に読み替える。前後の空白は無視する。 */
+export function transactionCategory(transactionType: string | null | undefined): TransactionCategory {
+  const v = (transactionType ?? "").trim();
+  const hit = TRANSACTION_CATEGORIES.find((c) => (c.values as readonly string[]).includes(v));
+  return hit ? hit.value : "other";
+}

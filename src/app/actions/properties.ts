@@ -574,7 +574,11 @@ export async function getProperties() {
   try {
     const properties = await prisma.property.findMany({
       orderBy: { updatedAt: "desc" },
-      include: { images: { orderBy: { sortOrder: "asc" } } },
+      include: {
+        images: { orderBy: { sortOrder: "asc" } },
+        // 直近の物件確認だけを添える（一覧の表示と物件確認依頼書の「直近確認時の状況」に使う。2026-10-27）
+        confirmations: { orderBy: { confirmedAt: "desc" }, take: 1, select: { status: true, confirmedAt: true } },
+      },
     });
 
     // 一覧のサムネイル（各物件の1枚目）を署名付きURLにする。S-07。
@@ -586,9 +590,11 @@ export async function getProperties() {
     // あわせてエリア名を添える（画面側で対応表を持たせないため）。
     return {
       success: true as const,
-      data: properties.map((p) => ({
+      data: properties.map(({ confirmations, ...p }) => ({
         ...p,
         objMngNo: p.objMngNo.toString(),
+        confirmationStatus: confirmations[0]?.status ?? null,
+        confirmedAt: confirmations[0]?.confirmedAt ?? null,
         areaName: areaName(p.cityCd),
         // 一覧のサムネイル用。実際に登録された1枚目の署名付きURL。
         imageUrl: p.images[0] ? signed.get(p.images[0].path) ?? null : null,
@@ -844,7 +850,11 @@ export async function getPropertyForAdmin(id: number) {
   try {
     const property = await prisma.property.findUnique({
       where: { id },
-      include: { images: { orderBy: { sortOrder: "asc" } } },
+      include: {
+        images: { orderBy: { sortOrder: "asc" } },
+        // 物件確認の履歴（新しい順）。2026-10-27
+        confirmations: { orderBy: [{ confirmedAt: "desc" }, { id: "desc" }] },
+      },
     });
     if (!property) {
       return { success: false as const, error: "指定された物件が見つかりません。" };

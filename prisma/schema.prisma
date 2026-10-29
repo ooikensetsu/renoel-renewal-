@@ -126,6 +126,23 @@ model Property {
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
   images           PropertyImage[]
+  confirmations    PropertyConfirmation[]
+}
+
+/// 物件確認の記録（2026-10-27）。取扱会社へ現況を確かめるたびに1行足し、消さない。
+/// いちばん新しい行が物件確認依頼書の「直近確認時の状況」になる。選択肢は src/config/property.ts の CONFIRMATION_STATUSES。
+model PropertyConfirmation {
+  id          Int      @id @default(autoincrement())
+  propertyId  Int
+  /// 有・商談・保留・中止・済
+  status      String
+  confirmedAt DateTime @default(now())
+  /// 記録した管理者のメールアドレス
+  recordedBy  String
+  note        String?
+  property    Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@index([propertyId, confirmedAt])
 }
 
 model PropertyImage {

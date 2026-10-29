@@ -8,8 +8,9 @@
  * - 1枚に10件。10件を超える会社は2枚目以降のシートに続ける（No. は通し番号）
  * - 取扱会社が未登録の物件は書き出さない（宛先が無いため）
  * - 「使い方」シートは送付先に要らないため外す
- * - 弊社管理番号の欄には掲載会社管理番号を、直近確認時の状況の欄には公開状態を入れる
- *   （どちらも 2026-10-15 大野の指示）。御社管理番号の欄は空けておく
+ * - 弊社管理番号の欄には掲載会社管理番号を入れる（2026-10-15 大野の指示）。御社管理番号の欄は空けておく
+ * - 直近確認時の状況の欄には、物件確認の最新の状況（有・商談・保留・中止・済）を入れる。記録が無ければ空欄
+ *   （2026-10-27 大野の指示。それまでは公開状態を入れていたが、公開状態は社内の区分で取扱会社には意味が無い）
  * - 分譲地名・マンション名の欄には、マンションの物件名だけを入れる。戸建て・土地の物件名は
  *   所在地と駅から自動で作った文（例「姫路市 相野（太市駅） 2階建 4LDK」）で、分譲地名ではない
  * - 様式の欄に収まらない値があるため、書式を2つ足す（Excel で開いて確かめた。2026-10-15）
@@ -21,7 +22,6 @@
 
 // 相対パス＋拡張子つきで書くのは、node の標準テストランナーから読めるようにするため。
 import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
-import { DISCLOSURE_LEVEL_LABEL, type DisclosureLevel } from "../config/security.ts";
 import { PROPERTY_TYPE, PROPERTY_TYPE_LABEL } from "../config/property.ts";
 import { isBlankMark } from "./blank.ts";
 import { compareAgencies } from "./agencyReading.ts";
@@ -36,7 +36,8 @@ export type ConfirmationProperty = {
   agencyTel: string | null;
   listingCompanyNo: string | null;
   syubetu: number;
-  disclosureLevel: number;
+  /** 物件確認の最新の状況（PropertyConfirmation の直近の行）。記録が無ければ null */
+  confirmationStatus: string | null;
   title: string;
   address: string | null;
   landMen: number | null;
@@ -304,7 +305,7 @@ export function fillSheet(
     if (!p) continue;
     xml = setCell(xml, `B${bottom}`, text(p.listingCompanyNo), styles.shrink);
     xml = setCell(xml, `C${top}`, PROPERTY_TYPE_LABEL[p.syubetu] ?? "");
-    xml = setCell(xml, `C${bottom}`, DISCLOSURE_LEVEL_LABEL[p.disclosureLevel as DisclosureLevel] ?? "");
+    xml = setCell(xml, `C${bottom}`, text(p.confirmationStatus));
     xml = setCell(xml, `D${top}`, p.syubetu === PROPERTY_TYPE.MANSION ? text(p.title) : "", styles.small);
     xml = setCell(xml, `E${top}`, text(p.address));
     xml = setCell(xml, `F${top}`, areaText(p));

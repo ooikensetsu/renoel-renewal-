@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { parsePropertyListState, parseUserListState } from "./adminListState.ts";
 
 const PROPERTY_STATE = {
-  filter: { keyword: "佐久", syubetu: 2, level: "all", agency: "テスト不動産", top: "on" },
+  filter: { keyword: "佐久", syubetu: 2, level: "all", agency: "テスト不動産", top: "on", transaction: "exclusive" },
   page: 6,
   perPage: 50,
 };
@@ -49,6 +49,7 @@ test("物件：絞り込みの値が想定外なら戻さない", () => {
     { level: null },
     { agency: undefined },
     { top: "yes" },
+    { transaction: "専任" },
   ];
   for (const patch of broken) {
     const v = { ...PROPERTY_STATE, filter: { ...PROPERTY_STATE.filter, ...patch } };
@@ -66,4 +67,12 @@ test("会員：絞り込みの値が想定外なら戻さない", () => {
 test("余分な項目は持ち込まない", () => {
   const v = { ...USER_STATE, extra: 1, filter: { ...USER_STATE.filter, extra: 1 } };
   assert.deepEqual(parseUserListState(v), USER_STATE);
+});
+
+test("物件：取引態様を足す前（2026-10-27 より前）に保存した状態は「すべて」として戻す", () => {
+  const { transaction: _omit, ...old } = PROPERTY_STATE.filter;
+  void _omit;
+  const restored = parsePropertyListState({ ...PROPERTY_STATE, filter: old });
+  assert.equal(restored?.filter.transaction, "all");
+  assert.equal(restored?.page, 6);
 });

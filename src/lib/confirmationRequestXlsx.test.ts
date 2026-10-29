@@ -28,7 +28,7 @@ function property(over: Partial<ConfirmationProperty> = {}): ConfirmationPropert
     agencyTel: "079-000-0000",
     listingCompanyNo: "0123",
     syubetu: 2,
-    disclosureLevel: 0,
+    confirmationStatus: null,
     title: "姫路市 相野（太市駅） 2階建 4LDK",
     address: "兵庫県姫路市相野",
     landMen: 118.75,
@@ -147,9 +147,9 @@ test("読みがあれば会社を50音順に並べ、読みの無い会社は最
   assert.equal(groups[4].reading, null);
 });
 
-test("様式の欄に値が入る（弊社管理番号＝掲載会社管理番号、直近確認時の状況＝公開状態）", () => {
+test("様式の欄に値が入る（弊社管理番号＝掲載会社管理番号、直近確認時の状況＝物件確認の最新の状況）", () => {
   const { groups } = groupForConfirmation([
-    property({ disclosureLevel: 1, syubetu: 3, landMen: null, bldMen: 65.2, title: "A&B <マンション>" }),
+    property({ confirmationStatus: "商談", syubetu: 3, landMen: null, bldMen: 65.2, title: "A&B <マンション>" }),
   ]);
   const { sheets, names } = open(buildConfirmationWorkbook(template, groups, new Date(2026, 9, 15)));
   assert.deepEqual(names, ["くらすONE(株)"]);
@@ -164,7 +164,7 @@ test("様式の欄に値が入る（弊社管理番号＝掲載会社管理番�
   assert.equal(cell(xml, "B12"), "", "御社管理番号は空けておく");
   assert.equal(cell(xml, "B13"), "0123");
   assert.equal(cell(xml, "C12"), "マンション");
-  assert.equal(cell(xml, "C13"), "会員限定");
+  assert.equal(cell(xml, "C13"), "商談");
   assert.equal(cell(xml, "D12"), "A&amp;B &lt;マンション&gt;");
   assert.equal(cell(xml, "E12"), "兵庫県姫路市相野");
   assert.equal(cell(xml, "F12"), "建物:65.2");
@@ -320,4 +320,10 @@ test("ファイル名は Windows で使えない文字を外し、重複しな�
   const used = new Set<string>();
   assert.equal(confirmationFileName('A/B:C*"本店"', "20261015", used), "物件確認依頼_ABC本店_20261015");
   assert.equal(confirmationFileName("abc本店", "20261015", used), "物件確認依頼_abc本店~2_20261015", "大文字小文字だけの違いも重複");
+});
+
+test("物件確認の記録が無い物件は、直近確認時の状況を空欄にする（公開状態は書かない）", () => {
+  const { groups } = groupForConfirmation([property({ confirmationStatus: null })]);
+  const xml = open(buildConfirmationWorkbook(template, groups, new Date(2026, 9, 27))).sheets[0];
+  assert.equal(cell(xml, "C13"), "");
 });

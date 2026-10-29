@@ -19,7 +19,7 @@ function property(over: Partial<ConfirmationProperty> = {}): ConfirmationPropert
     agencyTel: "079-000-0000",
     listingCompanyNo: "0123",
     syubetu: 2,
-    disclosureLevel: 0,
+    confirmationStatus: null,
     title: "姫路市 相野（太市駅） 2階建 4LDK",
     address: "兵庫県姫路市相野",
     landMen: 118.75,

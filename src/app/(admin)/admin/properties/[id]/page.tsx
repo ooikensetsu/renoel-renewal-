@@ -3,6 +3,7 @@ import Link from "next/link";
 import { getPropertyForAdmin } from "@/app/actions/properties";
 import PropertyEditForm from "./PropertyEditForm";
 import PropertyImages from "./PropertyImages";
+import PropertyConfirmationPanel from "./PropertyConfirmationPanel";
 import DisclosureBadge from "@/components/DisclosureBadge";
 import { isStorageConfigured } from "@/lib/storage";
 
@@ -126,7 +127,14 @@ export default async function PropertyAdminDetail({
         storageReady={isStorageConfigured()}
       />
 
-      <PropertyEditForm property={p as unknown as Record<string, unknown>} />
+      <PropertyConfirmationPanel propertyId={p.id} history={p.confirmations} />
+
+      {/* key：状況「中止」「済」の記録で公開レベルが変わったとき、フォームの初期値を読み直す。
+          付けないと古い公開レベルが入ったままになり、そのまま保存すると非表示が戻ってしまう */}
+      <PropertyEditForm
+        key={`${p.disclosureLevel}-${p.updatedAt.toISOString()}`}
+        property={p as unknown as Record<string, unknown>}
+      />
     </div>
   );
 }

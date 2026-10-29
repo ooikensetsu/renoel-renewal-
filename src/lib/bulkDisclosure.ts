@@ -24,34 +24,47 @@ export type BulkDisclosurePlan =
   | { ok: true; ids: number[]; level: DisclosureLevel; expectedCount: number }
   | { ok: false; error: string };
 
-/** 入力の形を検証する。DBで実在を数える前の段階。 */
-export function planBulkDisclosure(req: BulkDisclosureRequest): BulkDisclosurePlan {
-  if (!Array.isArray(req.ids) || req.ids.length === 0) {
+/**
+ * 選んだ物件IDと想定件数の形を検証する。DBで実在を数える前の段階。
+ * 公開レベルの一括変更と、物件確認の状況の一括記録（propertyConfirmation.ts）で共用する。
+ */
+export function planBulkIds(
+  rawIds: unknown,
+  expectedCount: unknown
+): { ok: true; ids: number[] } | { ok: false; error: string } {
+  if (!Array.isArray(rawIds) || rawIds.length === 0) {
     return { ok: false, error: "物件が1件も選ばれていません。" };
   }
-  if (req.ids.length > MAX_BULK_DISCLOSURE_ITEMS) {
+  if (rawIds.length > MAX_BULK_DISCLOSURE_ITEMS) {
     return {
       ok: false,
       error: `一度に変更できるのは ${MAX_BULK_DISCLOSURE_ITEMS} 件までです。`,
     };
   }
-  if (!req.ids.every((id) => Number.isInteger(id) && (id as number) > 0)) {
+  if (!rawIds.every((id) => Number.isInteger(id) && (id as number) > 0)) {
     return { ok: false, error: "物件の指定が正しくありません。" };
   }
-  const ids = [...new Set(req.ids as number[])];
-  if (ids.length !== req.ids.length) {
+  const ids = [...new Set(rawIds as number[])];
+  if (ids.length !== rawIds.length) {
     return { ok: false, error: "同じ物件が重複して指定されています。" };
   }
-  if (!isDisclosureLevel(req.level)) {
-    return { ok: false, error: "公開レベルが正しくありません。" };
-  }
-  if (req.expectedCount !== ids.length) {
+  if (expectedCount !== ids.length) {
     return {
       ok: false,
       error: "画面の件数と送信された件数が一致しないため、変更を中止しました。",
     };
   }
-  return { ok: true, ids, level: req.level, expectedCount: ids.length };
+  return { ok: true, ids };
+}
+
+/** 公開レベルの一括変更の入力を検証する。 */
+export function planBulkDisclosure(req: BulkDisclosureRequest): BulkDisclosurePlan {
+  const target = planBulkIds(req.ids, req.expectedCount);
+  if (!target.ok) return target;
+  if (!isDisclosureLevel(req.level)) {
+    return { ok: false, error: "公開レベルが正しくありません。" };
+  }
+  return { ok: true, ids: target.ids, level: req.level, expectedCount: target.ids.length };
 }
 
 /**

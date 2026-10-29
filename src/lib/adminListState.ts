@@ -6,6 +6,7 @@
  */
 import type { AdminPropertyFilter } from "./adminPropertyFilter.ts";
 import { ADMIN_PER_PAGE_OPTIONS } from "./pagination.ts";
+import { TRANSACTION_CATEGORIES } from "../config/property.ts";
 
 export const PROPERTY_LIST_STATE_KEY = "admin:properties:list";
 export const USER_LIST_STATE_KEY = "admin:users:list";
@@ -63,8 +64,18 @@ export function parsePropertyListState(v: unknown): ListState<AdminPropertyFilte
   if (typeof f.keyword !== "string" || typeof f.agency !== "string") return null;
   if (syubetu === undefined || level === undefined) return null;
   if (f.top !== "all" && f.top !== "on" && f.top !== "off") return null;
+  // 取引態様は 2026-10-27 に足した。それより前に保存した状態には無いので「すべて」とみなす
+  const transaction = f.transaction ?? "all";
+  if (transaction !== "all" && !TRANSACTION_CATEGORIES.some((c) => c.value === transaction)) return null;
   return {
-    filter: { keyword: f.keyword, syubetu, level, agency: f.agency, top: f.top },
+    filter: {
+      keyword: f.keyword,
+      syubetu,
+      level,
+      agency: f.agency,
+      top: f.top,
+      transaction: transaction as AdminPropertyFilter["transaction"],
+    },
     ...paging,
   };
 }

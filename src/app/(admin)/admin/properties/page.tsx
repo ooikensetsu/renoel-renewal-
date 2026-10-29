@@ -25,6 +25,7 @@ import { getAgencyContactMap } from "@/app/actions/agencyContacts";
 import { blankToNull } from "@/lib/blank";
 import BulkImageUpload from "./BulkImageUpload";
 import BulkDisclosureBar from "./BulkDisclosureBar";
+import BulkConfirmationBar from "./BulkConfirmationBar";
 import DisclosureBadge from "@/components/DisclosureBadge";
 import AdminPager from "@/components/AdminPager";
 import { paginate, ADMIN_DEFAULT_PER_PAGE } from "@/lib/pagination";
@@ -34,9 +35,16 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { DISCLOSURE_LEVEL_LABEL } from "@/config/security";
-import { PROPERTY_TYPE_LABEL, PROPERTY_TYPE_TAB_ORDER } from "@/config/property";
+import {
+  PROPERTY_TYPE_LABEL,
+  PROPERTY_TYPE_TAB_ORDER,
+  TRANSACTION_CATEGORIES,
+  transactionCategory,
+  type TransactionCategory,
+} from "@/config/property";
 import {
   matchesAdminFilter,
+  isAdminFilterActive,
   agencyOptions,
   type AdminPropertyFilter,
 } from "@/lib/adminPropertyFilter";
@@ -73,6 +81,10 @@ type PropertyRow = {
   imageUrl?: string | null;
   /** 登録画像の枚数。0枚の物件を見つけられるようにする。 */
   imageCount?: number;
+  /** 取引態様（取得元の表記のまま） */
+  transactionType: string | null;
+  /** 物件確認の最新の状況（有・商談・保留・中止・済）。記録が無ければ null（2026-10-27） */
+  confirmationStatus: string | null;
 };
 
 /**
@@ -122,7 +134,7 @@ export default function PropertyManagement() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // 一覧の絞り込み。判定は src/lib/adminPropertyFilter.ts に集約している。
-  const NO_FILTER: AdminPropertyFilter = { keyword: "", syubetu: "all", level: "all", agency: "all", top: "all" };
+  const NO_FILTER: AdminPropertyFilter = { keyword: "", syubetu: "all", level: "all", agency: "all", top: "all", transaction: "all" };
   // 取扱会社の画面（/admin/agencies）から ?agency=会社名 で来たら、その会社で絞り込んで開く
   const searchParams = useSearchParams();
   const [filter, setFilter] = useState<AdminPropertyFilter>(() => ({
@@ -139,6 +151,7 @@ export default function PropertyManagement() {
   const levelId = useId();
   const agencyId = useId();
   const topId = useId();
+  const transactionId = useId();
 
   const updateFilter = (patch: Partial<AdminPropertyFilter>) => {
     setFilter((prev) => ({ ...prev, ...patch }));
@@ -372,12 +385,7 @@ export default function PropertyManagement() {
   const countBySyubetu = (code: "all" | number) =>
     properties.filter((p) => matchesAdminFilter(p, { ...filter, syubetu: code })).length;
 
-  const isFiltered =
-    filter.keyword.trim() !== "" ||
-    filter.syubetu !== "all" ||
-    filter.level !== "all" ||
-    filter.agency !== "all" ||
-    filter.top !== "all";
+  const isFiltered = isAdminFilterActive(filter);
 
   const allVisibleSelected =
     pageProperties.length > 0 && pageProperties.every((p) => selectedIds.has(p.id));
@@ -409,6 +417,15 @@ export default function PropertyManagement() {
     }
   };
   const topCount = properties.filter((p) => p.showOnTop).length;
+  // 取引態様の選択肢に出す件数（全物件での数。他の絞り込みには左右されない）
+  const transactionCounts = useMemo(() => {
+    const counts = new Map<TransactionCategory, number>();
+    for (const p of properties) {
+      const c = transactionCategory(p.transactionType);
+      counts.set(c, (counts.get(c) ?? 0) + 1);
+    }
+    return counts;
+  }, [properties]);
 
   const handleBulkDone = (message: string) => {
     setNotice(message);
@@ -585,6 +602,24 @@ export default function PropertyManagement() {
                 <option value="off">掲載していない</option>
               </select>
             </div>
+            <div className="flex items-center gap-2">
+              <label htmlFor={transactionId} className="text-sm font-bold text-reno-mute-dark">
+                取引態様
+              </label>
+              <select
+                id={transactionId}
+                value={filter.transaction}
+                onChange={(e) => updateFilter({ transaction: e.target.value as AdminPropertyFilter["transaction"] })}
+                className="px-3 py-2.5 rounded-xl border border-reno-line bg-white text-sm font-bold text-ink outline-none focus:border-teal"
+              >
+                <option value="all">すべて</option>
+                {TRANSACTION_CATEGORIES.map((c) => (
+                  <option key={c.value} value={c.value}>
+                    {c.label}（{transactionCounts.get(c.value) ?? 0}件）
+                  </option>
+                ))}
+              </select>
+            </div>
             {isFiltered && (
               <button
                 onClick={() => updateFilter(NO_FILTER)}
@@ -606,6 +641,10 @@ export default function PropertyManagement() {
         <BulkDisclosureBar
           selectedIds={[...selectedIds]}
           onClear={() => setSelectedIds(new Set())}
+          onDone={handleBulkDone}
+        />
+        <BulkConfirmationBar
+          selectedIds={[...selectedIds]}
           onDone={handleBulkDone}
         />
 
@@ -706,6 +745,9 @@ export default function PropertyManagement() {
                       <p className="text-xs text-reno-mute-dark mt-1 whitespace-nowrap">
                         {blankToNull(prop.agencyTel) ?? "電話番号未登録"}
                       </p>
+                      <p className="text-xs text-reno-mute-dark mt-1">
+                        取引態様 {blankToNull(prop.transactionType) ?? "未登録"}
+                      </p>
                     </td>
                     <td className="px-3 py-4">
                       <p className="text-ink">{prop.address || "—"}</p>
@@ -723,6 +765,9 @@ export default function PropertyManagement() {
                     </td>
                     <td className="px-3 py-4">
                       <DisclosureBadge level={prop.disclosureLevel} />
+                      <p className="text-xs text-reno-mute-dark mt-1 whitespace-nowrap">
+                        確認 {prop.confirmationStatus ?? "未確認"}
+                      </p>
                     </td>
                     <td className="px-2 py-4 text-center">
                       <input

@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   matchesAdminFilter,
+  isAdminFilterActive,
   agencyOptions,
   NO_AGENCY,
   type AdminPropertyFilter,
@@ -24,7 +25,7 @@ function prop(overrides: Partial<FilterableProperty> = {}): FilterableProperty {
   };
 }
 
-const ALL: AdminPropertyFilter = { keyword: "", syubetu: "all", level: "all", agency: "all", top: "all" };
+const ALL: AdminPropertyFilter = { keyword: "", syubetu: "all", level: "all", agency: "all", top: "all", transaction: "all" };
 
 test("指定なしなら全件通る", () => {
   assert.equal(matchesAdminFilter(prop(), ALL), true);
@@ -69,4 +70,24 @@ test("トップ掲載で絞れる（掲載中だけ・掲載していないも�
   assert.equal(matchesAdminFilter(prop({ showOnTop: false }), { ...ALL, top: "off" }), true);
   assert.equal(matchesAdminFilter(prop({ showOnTop: true }), { ...ALL, top: "off" }), false);
   assert.equal(matchesAdminFilter(prop({ showOnTop: true }), ALL), true);
+});
+
+test("取引態様の絞り込み：athome と REINS の表記をまとめ、分類に無い値は「その他」で拾う", () => {
+  const types = ["専任媒介", "専任", "一般", "媒介", "代理", null, "売主"];
+  const pick = (transaction: AdminPropertyFilter["transaction"]) =>
+    types.filter((t) => matchesAdminFilter(prop({ transactionType: t }), { ...ALL, transaction }));
+  assert.deepEqual(pick("exclusive"), ["専任媒介", "専任"]);
+  assert.deepEqual(pick("general"), ["一般"]);
+  assert.deepEqual(pick("seller"), ["売主"]);
+  assert.deepEqual(pick("other"), ["媒介", "代理", null]);
+  assert.equal(pick("all").length, types.length);
+});
+
+test("絞り込み中かの判定：どの項目を変えても絞り込み中になる（取引態様を含む）", () => {
+  assert.equal(isAdminFilterActive(ALL), false);
+  assert.equal(isAdminFilterActive({ ...ALL, keyword: "  " }), false);
+  assert.equal(isAdminFilterActive({ ...ALL, keyword: "佐久" }), true);
+  for (const patch of [{ syubetu: 2 }, { level: 0 }, { agency: NO_AGENCY }, { top: "on" }, { transaction: "other" }] as const) {
+    assert.equal(isAdminFilterActive({ ...ALL, ...patch }), true, JSON.stringify(patch));
+  }
 });
