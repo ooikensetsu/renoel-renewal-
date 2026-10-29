@@ -101,6 +101,28 @@ test("取扱会社ごとにまとめ、会社名順・掲載会社管理番号�
   assert.equal(groups[1].agencyTel, "079-111-1111");
 });
 
+test("電話は台帳を優先し、無ければ物件の番号。FAXは台帳の番号を様式に書く", () => {
+  const { groups } = groupForConfirmation(
+    [property({ agencyName: "A不動産", agencyTel: "079-000-0001" }), property({ agencyName: "B住建", agencyTel: "079-000-0002" })],
+    new Map(),
+    new Map([
+      ["A不動産", { tel: "079-999-0001", fax: "079-999-0011" }],
+      ["B住建", { tel: null, fax: null }],
+    ])
+  );
+  assert.deepEqual(
+    groups.map((g) => [g.agencyName, g.agencyTel, g.agencyFax]),
+    [
+      ["A不動産", "079-999-0001", "079-999-0011"],
+      ["B住建", "079-000-0002", ""],
+    ]
+  );
+  const { sheets } = open(buildConfirmationWorkbook(template, groups, new Date(2026, 9, 26)));
+  assert.equal(cell(sheets[0], "C4"), "TEL: 079-999-0001");
+  assert.equal(cell(sheets[0], "F4"), "FAX: 079-999-0011");
+  assert.equal(cell(sheets[1], "F4"), "FAX:");
+});
+
 test("読みがあれば会社を50音順に並べ、読みの無い会社は最後に会社名順で置く", () => {
   const { groups, unread } = groupForConfirmation(
     [

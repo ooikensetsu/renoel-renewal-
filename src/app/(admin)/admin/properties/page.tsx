@@ -9,11 +9,13 @@ import {
   buildConfirmationZip,
   confirmationFileName,
   groupForConfirmation,
+  type AgencyContact,
   type ConfirmationProperty,
 } from "@/lib/confirmationRequestXlsx";
 import { buildConfirmationBook } from "@/lib/confirmationBookXlsx";
 import { confirmationTemplate } from "@/lib/confirmationTemplate";
 import { getAgencyReadingMap } from "@/app/actions/agencyReadings";
+import { getAgencyContactMap } from "@/app/actions/agencyContacts";
 import { blankToNull } from "@/lib/blank";
 import BulkImageUpload from "./BulkImageUpload";
 import BulkDisclosureBar from "./BulkDisclosureBar";
@@ -96,6 +98,7 @@ export default function PropertyManagement() {
   const [properties, setProperties] = useState<PropertyRow[]>([]);
   // 取扱会社名 → 読み。確認依頼書を50音順に並べるために使う（/admin/agency-readings で登録）
   const [agencyReadings, setAgencyReadings] = useState<ReadonlyMap<string, string>>(new Map());
+  const [agencyContacts, setAgencyContacts] = useState<ReadonlyMap<string, AgencyContact>>(new Map());
   const [isLoading, setIsLoading] = useState(true);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [importStatus, setImportStatus] = useState<"idle" | "parsing" | "preview" | "importing" | "success" | "error">("idle");
@@ -139,7 +142,7 @@ export default function PropertyManagement() {
 
   // 取得だけを行う（useEffect の同期本体で setState しないため分けている）
   const fetchProperties = async () => {
-    const [res, readingRes] = await Promise.all([getProperties(), getAgencyReadingMap()]);
+    const [res, readingRes, contactRes] = await Promise.all([getProperties(), getAgencyReadingMap(), getAgencyContactMap()]);
     if (res.success) {
       setProperties(res.data as PropertyRow[]);
     } else {
@@ -148,6 +151,9 @@ export default function PropertyManagement() {
     // 読みが取れなくても一覧は使えるようにする（確認依頼書が会社名順になるだけ）
     if (readingRes.success) setAgencyReadings(new Map(Object.entries(readingRes.data)));
     else setErrorMessage(readingRes.error);
+    // 連絡先が取れなくても同じ（確認依頼書の電話は物件の値、FAXは空欄になるだけ）
+    if (contactRes.success) setAgencyContacts(new Map(Object.entries(contactRes.data)));
+    else setErrorMessage(contactRes.error);
   };
 
   const loadProperties = async () => {
@@ -285,8 +291,8 @@ export default function PropertyManagement() {
   //   一括印刷：全社を1冊・1シートに並べ、会社ごとに改ページ（まとめて印刷する用）
   //   会社別　：会社ごとの xlsx を50音順の通し番号付きで zip にまとめる（FAX を会社ごとに送る用）。1社なら xlsx を1つ
   const confirmationGroups = useMemo(
-    () => groupForConfirmation(visibleProperties as unknown as ConfirmationProperty[], agencyReadings),
-    [visibleProperties, agencyReadings]
+    () => groupForConfirmation(visibleProperties as unknown as ConfirmationProperty[], agencyReadings, agencyContacts),
+    [visibleProperties, agencyReadings, agencyContacts]
   );
   const handleConfirmationExport = (mode: "book" | "each") => {
     const { groups, skipped, unread } = confirmationGroups;

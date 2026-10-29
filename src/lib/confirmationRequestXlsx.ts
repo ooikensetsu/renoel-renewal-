@@ -49,20 +49,28 @@ export type ConfirmationGroup = {
   /** 50音順に並べるための読み。未登録なら null（並びの最後に置く） */
   reading: string | null;
   agencyTel: string;
+  /** 取扱会社の台帳のFAX番号。台帳に無ければ空（様式の欄を手書き用に空ける） */
+  agencyFax: string;
   properties: ConfirmationProperty[];
 };
+
+/** 取扱会社の台帳（Agency）の連絡先。会社名 → 値 */
+export type AgencyContact = { tel: string | null; fax: string | null };
 
 const text = (value: unknown) => (isBlankMark(value) ? "" : String(value).trim());
 
 /**
  * 取扱会社ごとにまとめる。会社は読みの50音順（2026-10-19。読みの無い会社は最後に会社名順）、
  * 会社の中は掲載会社管理番号順。
- * 電話番号は物件ごとに入っているため、最初に見つかった番号を使う。
+ * 電話番号は台帳（会社側が正本）を優先し、台帳に無ければ物件で最初に見つかった番号を使う。
+ * FAX番号は台帳にだけある（2026-10-26 から書く）。
  * @param readings 会社名 → 読み（AgencyReading 表の値）
+ * @param contacts 会社名 → 台帳の電話・FAX（Agency 表の値）
  */
 export function groupForConfirmation(
   properties: readonly ConfirmationProperty[],
-  readings: ReadonlyMap<string, string> = new Map()
+  readings: ReadonlyMap<string, string> = new Map(),
+  contacts: ReadonlyMap<string, AgencyContact> = new Map()
 ): {
   groups: ConfirmationGroup[];
   skipped: number;
@@ -80,7 +88,8 @@ export function groupForConfirmation(
     const group = byAgency.get(name) ?? {
       agencyName: name,
       reading: readings.get(name) || null,
-      agencyTel: "",
+      agencyTel: text(contacts.get(name)?.tel),
+      agencyFax: text(contacts.get(name)?.fax),
       properties: [],
     };
     if (group.agencyTel === "") group.agencyTel = text(p.agencyTel);
@@ -281,8 +290,8 @@ export function fillSheet(
 
   xml = setCell(xml, "A3", group.agencyName);
   xml = setCell(xml, "C4", group.agencyTel ? `TEL: ${group.agencyTel}` : "TEL:");
-  // 取扱会社のFAX番号はDBに無い。様式の「000-000-0000」を消し、手書きできるよう空ける
-  xml = setCell(xml, "F4", "FAX:");
+  // 台帳にFAXが無い会社は、様式の「000-000-0000」を消し、手書きできるよう空ける
+  xml = setCell(xml, "F4", group.agencyFax ? `FAX: ${group.agencyFax}` : "FAX:");
   xml = setCell(xml, "R1", `${page}/${pages}頁`);
   xml = setCachedValue(xml, "L1", today);
   xml = setCachedValue(xml, "O1", `${rows.length}件`);
