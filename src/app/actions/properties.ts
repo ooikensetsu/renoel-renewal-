@@ -17,6 +17,7 @@ import { blankToNull } from "@/lib/blank";
 import { buildBulkInsert, buildBulkUpdateById } from "@/lib/propertyBulkUpsert";
 import { importKey, planImportMatches } from "@/lib/importMatch";
 import { PROPERTY_FIELDS } from "@/config/propertyFields";
+import { changedPropertyColumns } from "@/lib/propertyCsv";
 import {
   PREF_CODE,
   DEFAULT_CITY_CODE,
@@ -189,10 +190,12 @@ export type DiffResult = {
   /** skip は取り込まない行（掲載会社管理番号が空など）。理由は skipReason */
   type: "new" | "update" | "no_change" | "skip";
   /** objMngNo は BigInt のままだと画面へ渡せないため文字列で返す。 */
-  current?: { objMngNo: string; title: string; priceMan: number } | null;
+  current?: { objMngNo: string; title: string; priceMan: number; disclosureLevel: number } | null;
   incoming: IncomingProperty;
   changes?: string[];
   skipReason?: string;
+  /** 取り込んだときの公開レベル。確認画面で「旧→新」を出すために使う */
+  disclosureLevel?: number;
 };
 
 /** 取り込まない理由。null なら取り込める。判定は取込前の確認と取込本体の両方がここを通る（D-09）。 */
@@ -235,6 +238,137 @@ async function matchWithExisting(items: IncomingProperty[]) {
     ok: true as const,
     matches: plan.matchedIds.map((id) => (id === null ? null : (byId.get(id) ?? null))),
   };
+}
+
+/**
+ * 取り込んだときの公開レベル。CSVの値（空欄は一般公開）を検証する。
+ * 取込前の確認と取込本体の両方がここを通る（D-09）。読めない値なら null。
+ */
+function importDisclosureLevel(item: IncomingProperty): number | null {
+  const raw = (item.disclosureLevel ?? "").trim();
+  const requested = raw === "" ? DISCLOSURE_LEVEL.PUBLIC : Number(raw);
+  return isDisclosureLevel(requested) ? requested : null;
+}
+
+/**
+ * 取込1行を検証し、DBへ書く形にする。取込前の確認と取込本体で共用する（D-09）。
+ * 1か所でも読めなければ理由を返す（呼び出し側は全体を中止する）。
+ */
+function buildImportRow(
+  item: IncomingProperty
+): { ok: true; row: PropertyRow } | { ok: false; error: string } {
+  const objMngNo = parseObjMngNo(item.objMngNo);
+  const priceMan = parseInt(item.priceMan ?? "");
+  if (objMngNo === null || !Number.isInteger(priceMan)) {
+    return {
+      ok: false as const,
+      error: `物件管理番号または価格が数値として読めない行があるため、取込を中止しました（対象: ${
+        item.objMngNo ?? "不明"
+      }）。`,
+    };
+  }
+  if (!item.title || !item.address || !item.madori) {
+    return {
+      ok: false as const,
+      error: `物件名・所在地・間取りのいずれかが空の行があるため、取込を中止しました（対象: ${objMngNo}）。`,
+    };
+  }
+
+  // 対象エリアの外は取り込まない。エリアを増やすときは src/config/property.ts の AREAS に足す。
+  const cityCd = item.cityCd?.trim() || DEFAULT_CITY_CODE;
+  if (!isSupportedArea(cityCd)) {
+    return {
+      ok: false as const,
+      error: `掲載対象のエリアではない市区町村コードがあるため、取込を中止しました（対象: ${objMngNo} / cityCd: ${cityCd}）。エリアを増やす場合は src/config/property.ts の AREAS に追加してください。`,
+    };
+  }
+
+  // 種別は土地・一戸建て・マンションのみ。
+  // 空欄だけ既定値にする。読めない値（表示名の打ち間違いなど）は既定値にせず止める。
+  const syubetuRaw = (item.syubetu ?? "").trim();
+  const syubetu = syubetuRaw === "" ? DEFAULT_PROPERTY_TYPE : Number(syubetuRaw);
+  if (!isValidPropertyType(syubetu)) {
+    const valid = Object.entries(PROPERTY_TYPE_LABEL)
+      .map(([code, label]) => `${code}=${label}`)
+      .join(" / ");
+    return {
+      ok: false as const,
+      error: `物件種別の番号が正しくない行があるため、取込を中止しました（対象: ${objMngNo} / 物件種別: ${syubetuRaw}）。使える値は ${valid} です。`,
+    };
+  }
+
+  // 公開レベルは DISCLOSURE_LEVEL に定義した値のみ。空欄は 0（公開）扱い。
+  // 想定外の値をそのまま入れると「会員限定のつもりが公開されていた」事故になる。
+  const disclosureRaw = (item.disclosureLevel ?? "").trim();
+  const disclosureLevel = importDisclosureLevel(item);
+  if (disclosureLevel === null) {
+    const valid = Object.entries(DISCLOSURE_LEVEL_LABEL)
+      .map(([code, label]) => `${code}=${label}`)
+      .join(" / ");
+    return {
+      ok: false as const,
+      error: `公開レベルが正しくない行があるため、取込を中止しました（対象: ${objMngNo} / 公開状態: ${disclosureRaw}）。使える値は ${valid} です。`,
+    };
+  }
+
+  const row: PropertyRow = {
+    objMngNo,
+    syubetu,
+    syumoku: item.syumoku || DEFAULT_SYUMOKU,
+    title: item.title,
+    priceMan,
+    madori: item.madori,
+    landMen: parseFloat(item.landMen ?? "") || null,
+    bldMen: parseFloat(item.bldMen ?? "") || null,
+    bldStructure: item.bldStructure || "",
+    bldY: parseInt(item.bldY ?? "") || null,
+    bldM: parseInt(item.bldM ?? "") || null,
+    address: item.address,
+    prefCd: item.prefCd?.trim() || PREF_CODE,
+    cityCd,
+    disclosureLevel,
+    currentState: text(item.currentState),
+
+    trafficNote: text(item.trafficNote),
+    trafficLine: text(item.trafficLine),
+    trafficStation: text(item.trafficStation),
+    walkMinutes: int(item.walkMinutes),
+    leaseTermRent: text(item.leaseTermRent),
+    keyMoney: text(item.keyMoney),
+    depositGuarantee: text(item.depositGuarantee),
+    maintenanceCost: text(item.maintenanceCost),
+    otherLumpSum: text(item.otherLumpSum),
+    floorsInfo: text(item.floorsInfo),
+    parking: text(item.parking),
+    landRight: text(item.landRight),
+    deliveryTiming: text(item.deliveryTiming),
+    transactionType: text(item.transactionType),
+    listingCompanyNo: text(item.listingCompanyNo),
+    publishedOn: parseJapaneseDate(item.publishedOn),
+    nextUpdateOn: parseJapaneseDate(item.nextUpdateOn),
+
+    mgmtFeeYen: int(item.mgmtFeeYen),
+    repairFundYen: int(item.repairFundYen),
+    totalUnits: int(item.totalUnits),
+    floorNo: int(item.floorNo),
+    direction: text(item.direction),
+    balconyMen: float(item.balconyMen),
+    mgmtForm: text(item.mgmtForm),
+
+    buildingCoverage: int(item.buildingCoverage),
+    floorAreaRatio: int(item.floorAreaRatio),
+    zoning: text(item.zoning),
+    landCategory: text(item.landCategory),
+    cityPlanning: text(item.cityPlanning),
+    roadAccess: text(item.roadAccess),
+    privateRoad: text(item.privateRoad),
+
+    agencyName: text(item.agencyName),
+    agencyAddress: text(item.agencyAddress),
+    agencyTel: text(item.agencyTel),
+    agencyLicense: text(item.agencyLicense),
+  };
+  return { ok: true as const, row };
 }
 
 /**
@@ -486,21 +620,25 @@ export async function compareCSVData(csvData: IncomingProperty[]) {
     }
     const matchOf = new Map(importable.map((item, i) => [item, matched.matches[i]]));
 
+    // 取り込めない値（価格が数値でないなど）は、確認画面を出す前に止める（取込本体と同じ検証）。
+    const builtRows = new Map<IncomingProperty, PropertyRow>();
+    for (const item of importable) {
+      const built = buildImportRow(item);
+      if (!built.ok) return { success: false as const, error: built.error };
+      builtRows.set(item, built.row);
+    }
+
     const results: DiffResult[] = csvData.map((item) => {
       const skipReason = skipReasonOf(item);
       if (skipReason !== null) return { type: "skip", incoming: item, skipReason };
 
       const existing = matchOf.get(item);
-      if (!existing) return { type: "new", incoming: item };
+      const disclosureLevel = importDisclosureLevel(item) ?? undefined;
+      if (!existing) return { type: "new", incoming: item, disclosureLevel };
 
-      const changes: string[] = [];
-      if (existing.objMngNo !== parseObjMngNo(item.objMngNo)) changes.push("物件管理番号");
-      if (existing.title !== item.title) changes.push("物件名");
-      if (existing.priceMan !== parseInt(item.priceMan ?? "")) changes.push("価格");
-      if (existing.address !== item.address) changes.push("所在地");
-      if (existing.madori !== item.madori) changes.push("間取り");
-      if (existing.disclosureLevel !== parseInt(item.disclosureLevel ?? ""))
-        changes.push("公開レベル");
+      // 全項目を比べる（2026-10-15）。以前は物件名・価格など5項目だけを見ていたため、
+      // 電話番号や交通だけを直したCSVが「変更なし」に見えていた。
+      const changes = changedPropertyColumns(existing, builtRows.get(item) as PropertyRow);
 
       return {
         type: changes.length > 0 ? "update" : "no_change",
@@ -508,8 +646,10 @@ export async function compareCSVData(csvData: IncomingProperty[]) {
           objMngNo: existing.objMngNo.toString(),
           title: existing.title,
           priceMan: existing.priceMan,
+          disclosureLevel: existing.disclosureLevel,
         },
         incoming: item,
+        disclosureLevel,
         changes,
       };
     });
@@ -586,123 +726,17 @@ export async function importProperties(
         error: `掲載会社管理番号が空の行があるため、取込を中止しました（物件名: ${item.title ?? "不明"}）。`,
       };
     }
-    const objMngNo = parseObjMngNo(item.objMngNo);
-    const priceMan = parseInt(item.priceMan ?? "");
-    if (objMngNo === null || !Number.isInteger(priceMan)) {
-      return {
-        success: false as const,
-        error: `物件管理番号または価格が数値として読めない行があるため、取込を中止しました（対象: ${
-          item.objMngNo ?? "不明"
-        }）。`,
-      };
-    }
-    if (seenObjMngNos.has(objMngNo.toString())) {
+    const built = buildImportRow(item);
+    if (!built.ok) return { success: false as const, error: built.error };
+    const objMngNo = built.row.objMngNo.toString();
+    if (seenObjMngNos.has(objMngNo)) {
       return {
         success: false as const,
         error: `物件管理番号が重複している行があるため、取込を中止しました（対象: ${objMngNo}）。`,
       };
     }
-    seenObjMngNos.add(objMngNo.toString());
-
-    if (!item.title || !item.address || !item.madori) {
-      return {
-        success: false as const,
-        error: `物件名・所在地・間取りのいずれかが空の行があるため、取込を中止しました（対象: ${objMngNo}）。`,
-      };
-    }
-
-    // 対象エリアの外は取り込まない。エリアを増やすときは src/config/property.ts の AREAS に足す。
-    const cityCd = item.cityCd?.trim() || DEFAULT_CITY_CODE;
-    if (!isSupportedArea(cityCd)) {
-      return {
-        success: false as const,
-        error: `掲載対象のエリアではない市区町村コードがあるため、取込を中止しました（対象: ${objMngNo} / cityCd: ${cityCd}）。エリアを増やす場合は src/config/property.ts の AREAS に追加してください。`,
-      };
-    }
-
-    // 種別は土地・一戸建て・マンションのみ。
-    const syubetu = parseInt(item.syubetu ?? "") || DEFAULT_PROPERTY_TYPE;
-    if (!isValidPropertyType(syubetu)) {
-      const valid = Object.entries(PROPERTY_TYPE_LABEL)
-        .map(([code, label]) => `${code}=${label}`)
-        .join(" / ");
-      return {
-        success: false as const,
-        error: `物件種別の番号が正しくない行があるため、取込を中止しました（対象: ${objMngNo} / syubetu: ${syubetu}）。使える値は ${valid} です。`,
-      };
-    }
-
-    // 公開レベルは DISCLOSURE_LEVEL に定義した値のみ。空欄は 0（公開）扱い。
-    // 想定外の値をそのまま入れると「会員限定のつもりが公開されていた」事故になる。
-    const disclosureRaw = (item.disclosureLevel ?? "").trim();
-    const disclosureLevel = disclosureRaw === "" ? DISCLOSURE_LEVEL.PUBLIC : Number(disclosureRaw);
-    if (!isDisclosureLevel(disclosureLevel)) {
-      const valid = Object.entries(DISCLOSURE_LEVEL_LABEL)
-        .map(([code, label]) => `${code}=${label}`)
-        .join(" / ");
-      return {
-        success: false as const,
-        error: `公開レベルが正しくない行があるため、取込を中止しました（対象: ${objMngNo} / disclosureLevel: ${disclosureRaw}）。使える値は ${valid} です。`,
-      };
-    }
-
-    rows.push({
-      objMngNo,
-      syubetu,
-      syumoku: item.syumoku || DEFAULT_SYUMOKU,
-      title: item.title,
-      priceMan,
-      madori: item.madori,
-      landMen: parseFloat(item.landMen ?? "") || null,
-      bldMen: parseFloat(item.bldMen ?? "") || null,
-      bldStructure: item.bldStructure || "",
-      bldY: parseInt(item.bldY ?? "") || null,
-      bldM: parseInt(item.bldM ?? "") || null,
-      address: item.address,
-      prefCd: item.prefCd?.trim() || PREF_CODE,
-      cityCd,
-      disclosureLevel,
-      currentState: text(item.currentState),
-
-      trafficNote: text(item.trafficNote),
-      trafficLine: text(item.trafficLine),
-      trafficStation: text(item.trafficStation),
-      walkMinutes: int(item.walkMinutes),
-      leaseTermRent: text(item.leaseTermRent),
-      keyMoney: text(item.keyMoney),
-      depositGuarantee: text(item.depositGuarantee),
-      maintenanceCost: text(item.maintenanceCost),
-      otherLumpSum: text(item.otherLumpSum),
-      floorsInfo: text(item.floorsInfo),
-      parking: text(item.parking),
-      landRight: text(item.landRight),
-      deliveryTiming: text(item.deliveryTiming),
-      transactionType: text(item.transactionType),
-      listingCompanyNo: text(item.listingCompanyNo),
-      publishedOn: parseJapaneseDate(item.publishedOn),
-      nextUpdateOn: parseJapaneseDate(item.nextUpdateOn),
-
-      mgmtFeeYen: int(item.mgmtFeeYen),
-      repairFundYen: int(item.repairFundYen),
-      totalUnits: int(item.totalUnits),
-      floorNo: int(item.floorNo),
-      direction: text(item.direction),
-      balconyMen: float(item.balconyMen),
-      mgmtForm: text(item.mgmtForm),
-
-      buildingCoverage: int(item.buildingCoverage),
-      floorAreaRatio: int(item.floorAreaRatio),
-      zoning: text(item.zoning),
-      landCategory: text(item.landCategory),
-      cityPlanning: text(item.cityPlanning),
-      roadAccess: text(item.roadAccess),
-      privateRoad: text(item.privateRoad),
-
-      agencyName: text(item.agencyName),
-      agencyAddress: text(item.agencyAddress),
-      agencyTel: text(item.agencyTel),
-      agencyLicense: text(item.agencyLicense),
-    });
+    seenObjMngNos.add(objMngNo);
+    rows.push(built.row);
   }
 
   try {

@@ -75,3 +75,10 @@ test("書き出した CSV を読み直すと元の値に戻る（往復で壊れ
   assert.equal(parsed[0].title, "3LDK（和 8･6　洋 12）,南向き");
   assert.equal(parsed[0].address, '佐久市 "前山" 1-2');
 });
+
+test("引用符の中の改行は値の一部として読む（行が分かれない）", () => {
+  const rows = parseCsv('title,maintenanceCost\r\n"物件A","管理費 1万円\r\n修繕 5千円"\r\n"物件B",\r\n');
+  assert.equal(rows.length, 2);
+  assert.equal(rows[0].maintenanceCost, "管理費 1万円\n修繕 5千円");
+  assert.equal(rows[1].title, "物件B");
+});

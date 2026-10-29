@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useRef, useEffect, useMemo, useId } from "react";
-import { parseCsv, decodeCsvBuffer, buildCsv } from "@/lib/csv";
+import { parseCsv, decodeCsvBuffer } from "@/lib/csv";
+import { buildPropertyCsv, normalizePropertyCsvRow, propertyCsvHeaderOf } from "@/lib/propertyCsv";
 import { blankToNull } from "@/lib/blank";
 import BulkImageUpload from "./BulkImageUpload";
 import BulkDisclosureBar from "./BulkDisclosureBar";
@@ -54,6 +55,31 @@ type PropertyRow = {
   /** 登録画像の枚数。0枚の物件を見つけられるようにする。 */
   imageCount?: number;
 };
+
+/**
+ * サーバーへ送れなかったときの案内文。
+ *
+ * 行数が多いCSVは送信本文が大きくなり、上限を超えると 413 で弾かれる。
+ * 例外の文言をそのまま出しても伝わらないため、行数と対処を添える。
+ */
+function serverCallErrorMessage(err: unknown, rowCount: number): string {
+  const detail = err instanceof Error ? err.message : String(err);
+  if (/body exceeded|413/i.test(detail)) {
+    return `送信できるデータ量の上限を超えました（${rowCount}行）。CSVを分割してお試しください。`;
+  }
+  return `サーバーとの通信に失敗したため、取込を中止しました（${rowCount}行）。時間をおいてお試しください。詳細：${detail}`;
+}
+
+/** 取込前の確認画面の並び順。CSVの中での順番は同じ種類の中で保つ。 */
+const PREVIEW_ORDER: Record<DiffResult["type"], number> = { update: 0, new: 1, skip: 2, no_change: 3 };
+
+/** 公開状態の変化を「一般公開→会員限定」の形で出す。 */
+function levelChangeText(diff: DiffResult): string | null {
+  if (!diff.current || diff.disclosureLevel === undefined) return null;
+  if (diff.current.disclosureLevel === diff.disclosureLevel) return null;
+  const label = (level: number) => DISCLOSURE_LEVEL_LABEL[level as keyof typeof DISCLOSURE_LEVEL_LABEL] ?? String(level);
+  return `${label(diff.current.disclosureLevel)}→${label(diff.disclosureLevel)}`;
+}
 
 export default function PropertyManagement() {
   const [properties, setProperties] = useState<PropertyRow[]>([]);
@@ -118,20 +144,6 @@ export default function PropertyManagement() {
     })();
   }, []);
 
-  const handleExport = () => {
-    const headers = ["objMngNo", "title", "priceMan", "madori", "address", "disclosureLevel"];
-    const rows = properties.map(p => [p.objMngNo, p.title, p.priceMan, p.madori || "", p.address || "", p.disclosureLevel || 0]);
-    // buildCsv で引用符処理を通す。以前は join(",") で連結していたため、
-    // 物件名や住所にカンマが1つ入るだけで列がずれ、書き出したCSVを
-    // 取り込み直すと壊れていた（読み取り側の splitCsvLine とだけ食い違っていた）。
-    const csvContent = buildCsv(headers, rows);
-    const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.download = `properties_${new Date().getTime()}.csv`;
-    link.click();
-  };
-
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -140,6 +152,10 @@ export default function PropertyManagement() {
     setErrorMessage("");
     const reader = new FileReader();
     reader.onload = async (event) => {
+      // ファイルの読み取りと、サーバーへの問い合わせを分けて捕まえる。
+      // 以前は両方を1つの try で囲っていたため、送信が 413 で弾かれたときにも
+      // 「文字コードと列名をご確認ください」と出て、原因の見当がつかなかった。
+      let data: IncomingProperty[];
       try {
         // Excel の「CSV形式で保存」は既定で Shift-JIS。UTF-8 決め打ちだと日本語が全て化けるため、
         // バイト列で受け取って文字コードを判定する。
@@ -147,13 +163,22 @@ export default function PropertyManagement() {
         const { text, encoding } = decodeCsvBuffer(buffer);
         setDetectedEncoding(encoding);
         // 引用符に対応した分解。値の中のカンマで列がずれない。
-        const data = parseCsv(text) as IncomingProperty[];
-        if (data.length === 0) {
-          setErrorMessage("データ行がありません。1行目がヘッダー、2行目以降がデータになっているかご確認ください。");
-          setImportStatus("error");
-          return;
-        }
+        // 日本語の列名（一括出力の形式）と表示名の値を、取込の項目名と番号にそろえる。
+        data = parseCsv(text).map(normalizePropertyCsvRow) as IncomingProperty[];
+      } catch (err) {
+        console.error("CSVの解析に失敗:", err);
+        setErrorMessage("CSVを読み取れませんでした。文字コードと列名をご確認ください。");
+        setImportStatus("error");
+        return;
+      }
 
+      if (data.length === 0) {
+        setErrorMessage("データ行がありません。1行目がヘッダー、2行目以降がデータになっているかご確認ください。");
+        setImportStatus("error");
+        return;
+      }
+
+      try {
         // D-17 手順1：まず数える。この時点ではまだ1件も書き込まれていない。
         const res = await compareCSVData(data);
         if (!res.success) {
@@ -161,13 +186,15 @@ export default function PropertyManagement() {
           setImportStatus("error");
           return;
         }
-        setDiffResults(res.data);
+        // 変わる行を上に出す（掲載確認の戻しでは大半が「変更なし」で、変更が埋もれるため）。
+        const sorted = [...res.data].sort((a, b) => PREVIEW_ORDER[a.type] - PREVIEW_ORDER[b.type]);
+        setDiffResults(sorted);
         // 取り込まない行（掲載会社管理番号が空など）は最初から外し、選べないようにする。
-        setApprovedItems(new Set(res.data.flatMap((d, i) => (d.type === "skip" ? [] : [i]))));
+        setApprovedItems(new Set(sorted.flatMap((d, i) => (d.type === "skip" ? [] : [i]))));
         setImportStatus("preview");
       } catch (err) {
-        console.error("CSVの解析に失敗:", err);
-        setErrorMessage("CSVを読み取れませんでした。文字コードと列名をご確認ください。");
+        console.error("取込内容の確認に失敗:", err);
+        setErrorMessage(serverCallErrorMessage(err, data.length));
         setImportStatus("error");
       }
     };
@@ -215,6 +242,22 @@ export default function PropertyManagement() {
   );
   const pager = paginate(visibleProperties.length, String(page), perPage);
   const pageProperties = visibleProperties.slice(pager.start, pager.end);
+
+  // 掲載許可の確認表を兼ねる（2026-10-15）。絞り込み中の物件を全項目で書き出し、
+  // 公開状態などを直してこの画面の「一括入力 (CSV)」で戻すと上書きされる。列は src/lib/propertyCsv.ts。
+  const handleExport = () => {
+    // getProperties は全項目を返している（PropertyRow の型は一覧で使う列だけを書いている）
+    const csvContent = buildPropertyCsv(visibleProperties as unknown as Record<string, unknown>[]);
+    const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
+    const link = document.createElement("a");
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, "0");
+    link.href = URL.createObjectURL(blob);
+    link.download = `物件一覧_${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}.csv`;
+    link.click();
+    // すぐ解放するとブラウザによってはダウンロードが中断するため、少し待つ
+    setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+  };
   const changePage = (next: number) => {
     setPage(next);
     setSelectedIds(new Set());
@@ -301,7 +344,7 @@ export default function PropertyManagement() {
             onClick={handleExport}
             className="bg-white border border-reno-line px-4 py-2.5 rounded-xl flex items-center gap-2 text-sm font-bold text-ink hover:bg-reno-bg transition-colors"
           >
-            <Download size={18} /> 一括出力 (CSV)
+            <Download size={18} /> 一括出力 (CSV・{visibleProperties.length}件)
           </button>
           <BulkImageUpload />
           {/* 2026-10-08 手動登録の画面を作り、撤去していた「物件を登録」を戻した */}
@@ -691,9 +734,14 @@ export default function PropertyManagement() {
                           </td>
                           <td className="p-3">{diff.incoming.listingCompanyNo || "（空）"}</td>
                           <td className="p-3">{diff.incoming.agencyName || "—"}</td>
-                          <td className={`p-3 ${diff.changes?.includes('物件名') ? 'text-pink' : ''}`}>{diff.incoming.title}</td>
-                          <td className={`p-3 ${diff.changes?.includes('価格') ? 'text-pink' : ''}`}>{diff.incoming.priceMan}万円</td>
-                          <td className="p-3 text-reno-mute-dark">{diff.skipReason ?? (diff.changes?.join(', ') || '-')}</td>
+                          <td className={`p-3 ${diff.changes?.includes(propertyCsvHeaderOf('title')) ? 'text-pink' : ''}`}>{diff.incoming.title}</td>
+                          <td className={`p-3 ${diff.changes?.includes(propertyCsvHeaderOf('priceMan')) ? 'text-pink' : ''}`}>{diff.incoming.priceMan}万円</td>
+                          <td className="p-3 text-reno-mute-dark">
+                            {diff.skipReason ?? (diff.changes?.join(', ') || '-')}
+                            {levelChangeText(diff) && (
+                              <span className="block mt-1 text-ink whitespace-nowrap">公開状態：{levelChangeText(diff)}</span>
+                            )}
+                          </td>
                         </tr>
                       ))}
                     </tbody>

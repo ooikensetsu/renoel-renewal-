@@ -46,14 +46,37 @@ export function splitCsvLine(line: string): string[] {
 }
 
 /**
+ * 本文を1件ずつのレコードに分ける。引用符の中の改行はレコードの区切りにしない
+ * （「維持費等」は管理画面で複数行を入力できるため、書き出したCSVに改行が入る）。
+ * 改行は CRLF / LF の両方を受け、引用符の中の CRLF は LF にそろえる。
+ */
+export function splitCsvRecords(body: string): string[] {
+  const records: string[] = [];
+  let current = "";
+  let inQuotes = false;
+  for (let i = 0; i < body.length; i++) {
+    const ch = body[i];
+    if (ch === '"') inQuotes = !inQuotes; // "" は2回反転するので状態は変わらない
+    if (ch === "\r" && body[i + 1] === "\n") continue;
+    if ((ch === "\n" || ch === "\r") && !inQuotes) {
+      records.push(current);
+      current = "";
+      continue;
+    }
+    current += ch;
+  }
+  records.push(current);
+  return records;
+}
+
+/**
  * CSV本文をヘッダー付きの連想配列に変換する。
- * 改行は CRLF / LF の両方を受ける。引用符の中の改行には対応しない
- * （物件データで必要になったことがないため。必要になったら here を直す）。
+ * 空行は読み飛ばす。
  */
 export function parseCsv(text: string): Record<string, string>[] {
   // BOM を除く。Excel が付けることがある。
-  const body = text.replace(/^﻿/, "");
-  const lines = body.split(/\r?\n/).filter((line) => line.trim() !== "");
+  const body = text.replace(/^\uFEFF/, "");
+  const lines = splitCsvRecords(body).filter((line) => line.trim() !== "");
   if (lines.length === 0) return [];
 
   const headers = splitCsvLine(lines[0]);
