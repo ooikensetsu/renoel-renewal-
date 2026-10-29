@@ -632,7 +632,7 @@ $ node --test
 
 ---
 
-## 2026-10-29 モリシタ版の取扱会社台帳・物件確認の移植（**未リリース**・ブランチ `port-morishita-agency`）
+## 2026-10-29 モリシタ版の取扱会社台帳・物件確認の移植（2026-10-29 リリース・f49d9af）
 
 モリシタ版（morishita-used-housing-site-supabase）の 10/15〜10/29 の管理画面改修15件を移植した。REINS 取込（取得元の絞り込み・REINS 列）は大野の指示で対象外。
 
@@ -659,3 +659,9 @@ $ node --test
 
 **未確認**：一括記録（BulkConfirmationBar）・表記ゆれ統合の実行・表記ゆれ警告・会社別zip（2社以上）・本番での動作。
 **リリース時**：`prisma migrate deploy`（3件）→ push。戻すときは新しい表を消す前に控えを取る。
+
+### リリース結果（2026-10-29）
+- 本番DB（uptrrs…）に migration 3件を適用。新しい表4つは RLS 有効。
+- `main`（f49d9af）を `202610oono` へ push。Vercel の状態は success。
+- 公開側の `/`・`/properties`・`/property/283`・`/property/300` は200。管理画面はログイン画面へ転送される（307）。
+- 本番の管理画面での操作は未確認（大野さんの確認待ち）。返信先FAXは【要確認】のまま。
