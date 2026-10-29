@@ -62,9 +62,9 @@ export default function PropertyConfirmationPanel({
   return (
     <section className="bg-white p-8 rounded-2xl shadow-sm border border-reno-line space-y-6">
       <div>
-        <h2 className="text-lg font-bold text-ink">物件確認の状況</h2>
+        <h2 className="text-lg font-bold text-ink">直近確認時の状況</h2>
         <p className="text-sm text-reno-mute-dark mt-1">
-          取扱会社に確認した結果を記録します。最新の記録が物件確認依頼書の「直近確認時の状況」に入ります。
+          取扱会社に確認した結果を記録します。最新の記録が物件確認依頼書の「直近確認時の状況」の欄に入ります。
           「中止」「済」を記録すると公開レベルが「非表示」になります。
         </p>
       </div>

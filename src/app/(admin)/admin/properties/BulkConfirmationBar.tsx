@@ -48,7 +48,7 @@ export default function BulkConfirmationBar({
   return (
     <div className="px-4 pb-4 -mt-1 border-b border-reno-line bg-teal/5 flex flex-wrap items-center gap-3">
       <label htmlFor={statusId} className="text-sm font-bold text-reno-mute-dark">
-        物件確認の状況を
+        直近確認時の状況を
       </label>
       <select
         id={statusId}

@@ -60,7 +60,7 @@ export function planConfirmationRecord(req: {
 export function confirmationRecordPrompt(count: number, status: ConfirmationStatus): string {
   const hides = CONFIRMATION_STATUSES_THAT_HIDE.includes(status);
   return (
-    `${count === 1 ? "この物件" : `選択した ${count} 件`}に、物件確認の状況「${status}」を記録します。\n` +
+    `${count === 1 ? "この物件" : `選択した ${count} 件`}に、直近確認時の状況「${status}」を記録します。\n` +
     (hides
       ? "「中止」「済」を記録すると、公開レベルが「非表示」に変わります（変更前の公開レベルは控えとして保存されます）。\n"
       : "") +

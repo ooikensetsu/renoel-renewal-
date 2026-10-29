@@ -766,7 +766,7 @@ export default function PropertyManagement() {
                     <td className="px-3 py-4">
                       <DisclosureBadge level={prop.disclosureLevel} />
                       <p className="text-xs text-reno-mute-dark mt-1 whitespace-nowrap">
-                        確認 {prop.confirmationStatus ?? "未確認"}
+                        直近確認時 {prop.confirmationStatus ?? "未確認"}
                       </p>
                     </td>
                     <td className="px-2 py-4 text-center">
