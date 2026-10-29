@@ -3,6 +3,14 @@
 import { useState, useRef, useEffect, useMemo, useId } from "react";
 import { parseCsv, decodeCsvBuffer } from "@/lib/csv";
 import { buildPropertyCsv, normalizePropertyCsvRow, propertyCsvHeaderOf } from "@/lib/propertyCsv";
+import {
+  buildConfirmationWorkbook,
+  buildConfirmationZip,
+  confirmationFileName,
+  groupForConfirmation,
+  type ConfirmationProperty,
+} from "@/lib/confirmationRequestXlsx";
+import { confirmationTemplate } from "@/lib/confirmationTemplate";
 import { blankToNull } from "@/lib/blank";
 import BulkImageUpload from "./BulkImageUpload";
 import BulkDisclosureBar from "./BulkDisclosureBar";
@@ -11,7 +19,7 @@ import AdminPager from "@/components/AdminPager";
 import { paginate, ADMIN_DEFAULT_PER_PAGE } from "@/lib/pagination";
 import {
   Search, Pencil, ImageOff,
-  Upload, Download, X, Check, AlertCircle, Info, Plus
+  Upload, Download, X, Check, AlertCircle, Info, Plus, FileSpreadsheet
 } from "lucide-react";
 import Link from "next/link";
 import { DISCLOSURE_LEVEL_LABEL } from "@/config/security";
@@ -258,6 +266,43 @@ export default function PropertyManagement() {
     // すぐ解放するとブラウザによってはダウンロードが中断するため、少し待つ
     setTimeout(() => URL.revokeObjectURL(link.href), 1000);
   };
+  // 掲載の確認を取扱会社へ依頼する書面（2026-10-15）。絞り込み中の物件を会社ごとにまとめ、
+  // モリシタハウスの様式（物件確認依頼）に書き込んだ Excel を作る。様式と欄は src/lib/confirmationRequestXlsx.ts。
+  // 1社なら xlsx を1つ、2社以上なら会社ごとの xlsx を zip にまとめて渡す。
+  const confirmationGroups = useMemo(
+    () => groupForConfirmation(visibleProperties as unknown as ConfirmationProperty[]),
+    [visibleProperties]
+  );
+  const handleConfirmationExport = () => {
+    const { groups, skipped } = confirmationGroups;
+    if (groups.length === 0) {
+      setErrorMessage("取扱会社が登録された物件がありません。確認依頼書は会社ごとに作るため、取扱会社が必要です。");
+      return;
+    }
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const date = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}`;
+    const single = groups.length === 1;
+    const bytes = single
+      ? buildConfirmationWorkbook(confirmationTemplate(), groups, now)
+      : buildConfirmationZip(confirmationTemplate(), groups, now, date);
+    const blob = new Blob([bytes as BlobPart], {
+      type: single ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" : "application/zip",
+    });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = single
+      ? `${confirmationFileName(groups[0].agencyName, date, new Set())}.xlsx`
+      : `物件確認依頼_${groups.length}社_${date}.zip`;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+    setErrorMessage("");
+    setNotice(
+      `確認依頼書を作りました（${groups.length}社）。` +
+        (single ? "" : "会社ごとの Excel を zip にまとめています。") +
+        (skipped > 0 ? `取扱会社が未登録の${skipped}件は含めていません。` : "")
+    );
+  };
   const changePage = (next: number) => {
     setPage(next);
     setSelectedIds(new Set());
@@ -345,6 +390,13 @@ export default function PropertyManagement() {
             className="bg-white border border-reno-line px-4 py-2.5 rounded-xl flex items-center gap-2 text-sm font-bold text-ink hover:bg-reno-bg transition-colors"
           >
             <Download size={18} /> 一括出力 (CSV・{visibleProperties.length}件)
+          </button>
+          <button
+            onClick={handleConfirmationExport}
+            disabled={confirmationGroups.groups.length === 0}
+            className="bg-white border border-reno-line px-4 py-2.5 rounded-xl flex items-center gap-2 text-sm font-bold text-ink hover:bg-reno-bg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <FileSpreadsheet size={18} /> 確認依頼書 (Excel・{confirmationGroups.groups.length}社)
           </button>
           <BulkImageUpload />
           {/* 2026-10-08 手動登録の画面を作り、撤去していた「物件を登録」を戻した */}
