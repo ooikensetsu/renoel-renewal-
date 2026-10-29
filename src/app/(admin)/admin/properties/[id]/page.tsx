@@ -130,9 +130,10 @@ export default async function PropertyAdminDetail({
       <PropertyConfirmationPanel propertyId={p.id} history={p.confirmations} />
 
       {/* key：状況「中止」「済」の記録で公開レベルが変わったとき、フォームの初期値を読み直す。
-          付けないと古い公開レベルが入ったままになり、そのまま保存すると非表示が戻ってしまう */}
+          付けないと古い公開レベルが入ったままになり、そのまま保存すると非表示が戻ってしまう。
+          最新の記録で決める（updatedAt にすると通常の保存でも作り直され、「保存しました。」が消える） */}
       <PropertyEditForm
-        key={`${p.disclosureLevel}-${p.updatedAt.toISOString()}`}
+        key={`confirmation-${p.confirmations[0]?.id ?? "none"}`}
         property={p as unknown as Record<string, unknown>}
       />
     </div>

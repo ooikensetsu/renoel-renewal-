@@ -39,6 +39,40 @@ export function groupSpellingVariants(names: readonly string[]): string[][] {
   return [...groups.values()].filter((g) => g.length >= 2);
 }
 
+export type SpellingWarning = {
+  /** 新しい表記の会社名 */
+  name: string;
+  /** 表記ゆれで同じ形になる会社名（登録済みの会社、または同じ取込の別の新しい表記） */
+  similar: string[];
+};
+
+/**
+ * 保存しようとしている会社名のうち、表記ゆれで別の会社を増やしそうなものを返す（2026-10-27）。
+ * 登録済みの表記そのものは対象にしない（既にある表記で保存するたびに警告しないため）。
+ * 止めはしない。同じ会社かは人が見て決める。
+ *
+ * @param incoming 保存しようとしている会社名（旧表記は正式名に読み替えた後）
+ * @param known 登録済みの会社名（物件の会社名と台帳の会社名）
+ */
+export function findSpellingWarnings(
+  incoming: readonly (string | null | undefined)[],
+  known: readonly string[],
+): SpellingWarning[] {
+  const knownSet = new Set(known);
+  const newNames = [...new Set(incoming.map(agencyNameOf).filter((n): n is string => n !== null))].filter(
+    (n) => !knownSet.has(n),
+  );
+  const byKey = new Map<string, string[]>();
+  for (const name of new Set([...knownSet, ...newNames])) {
+    const key = sameCompanyKey(name);
+    if (key !== "") byKey.set(key, [...(byKey.get(key) ?? []), name]);
+  }
+  return newNames.flatMap((name) => {
+    const similar = (byKey.get(sameCompanyKey(name)) ?? []).filter((n) => n !== name);
+    return similar.length > 0 ? [{ name, similar }] : [];
+  });
+}
+
 /** 物件へ書き込む会社情報の列。会社側の項目名との対応。 */
 export const AGENCY_PROPERTY_FIELDS = [
   { agency: "address", property: "agencyAddress", label: "所在地" },

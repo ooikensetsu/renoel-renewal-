@@ -6,6 +6,7 @@ import prisma from "@/lib/prisma";
 import { requireAdmin, authErrorMessage } from "@/lib/auth";
 import { reportError } from "@/lib/errors";
 import { toJsonSafe } from "@/lib/json";
+import { agencySpellingWarnings, withAgencyMaster } from "@/lib/agencyMasterDb";
 import {
   agencyColumnsToWrite,
   agencyNameOf,
@@ -468,4 +469,21 @@ function revalidateAgencyPages() {
   revalidatePath("/admin/agencies");
   revalidatePath("/admin/agency-readings");
   revalidatePath("/admin/properties");
+}
+
+/**
+ * 物件フォームで入れた会社名が、登録済みの会社の表記ゆれに見えるかを調べる（2026-10-27。管理者のみ）。
+ * 保存の前に画面から呼び、似た会社があれば確認を出す。保存は止めない。
+ */
+export async function checkAgencySpelling(name: string) {
+  const auth = await requireAdmin();
+  if (!auth.ok) return { success: false as const, error: authErrorMessage(auth.reason) };
+
+  try {
+    const [resolved] = await withAgencyMaster([{ agencyName: String(name ?? "") }]);
+    const [warning] = await agencySpellingWarnings([resolved.agencyName]);
+    return { success: true as const, similar: warning?.similar ?? [] };
+  } catch (error) {
+    return reportError("checkAgencySpelling", error, "取扱会社の表記を確かめられませんでした。");
+  }
 }

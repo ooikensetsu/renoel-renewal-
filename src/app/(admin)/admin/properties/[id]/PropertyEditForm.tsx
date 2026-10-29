@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Save } from "lucide-react";
 import { createProperty, updateProperty } from "@/app/actions/properties";
+import { checkAgencySpelling } from "@/app/actions/agencies";
 import { PROPERTY_FIELD_GROUPS, type FieldDef } from "@/config/propertyFields";
 import { AREAS } from "@/config/property";
 import { PROPERTY_TYPE_LABEL } from "@/config/property";
@@ -17,6 +18,21 @@ function initialValue(value: unknown, type: FieldDef["type"]): string {
     return Number.isNaN(d.getTime()) ? "" : d.toISOString().slice(0, 10);
   }
   return String(value);
+}
+
+/**
+ * 会社名が登録済みの会社の表記ゆれに見えるとき、保存してよいかを聞く（2026-10-27）。
+ * 調べられなかったときは保存を止めない（警告のための確認で、保存の条件ではないため）。
+ */
+async function confirmAgencySpelling(agencyName: string): Promise<boolean> {
+  if (agencyName.trim() === "") return true;
+  const res = await checkAgencySpelling(agencyName);
+  if (!res.success || res.similar.length === 0) return true;
+  return window.confirm(
+    `取扱不動産会社名「${agencyName.trim()}」は、登録済みの${res.similar.map((s) => `「${s}」`).join("、")}と表記だけが違います。\n` +
+      "このまま保存すると、別の会社として増えます。\n\n" +
+      "同じ会社なら「キャンセル」を押し、登録済みの表記に直してください。別の会社なら「OK」で保存します。"
+  );
 }
 
 const labelClass =
@@ -47,6 +63,10 @@ export default function PropertyEditForm({
     setMessage(null);
 
     const formData = new FormData(e.currentTarget);
+    if (!(await confirmAgencySpelling(String(formData.get("agencyName") ?? "")))) {
+      setSaving(false);
+      return;
+    }
     if (isNew) {
       const res = await createProperty(formData);
       if (res.success) {

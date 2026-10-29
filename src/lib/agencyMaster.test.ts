@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   agencyColumnsToWrite,
   applyAgencyMaster,
+  findSpellingWarnings,
   groupSpellingVariants,
   planAgencyMerge,
   sameCompanyKey,
@@ -26,6 +27,22 @@ test("表記ゆれの候補は2社以上の組だけ。同じ名前の重複は1
     "株式会社",
   ]);
   assert.deepEqual(groups, [["(株)ここいえ 姫路店", "（株）ここいえ姫路店"]]);
+});
+
+test("新しい表記が登録済みの会社と同じ形になるときだけ警告する", () => {
+  const known = ["（株）ここいえ姫路店", "播磨不動産"];
+  assert.deepEqual(findSpellingWarnings(["株式会社ここいえ 姫路店"], known), [
+    { name: "株式会社ここいえ 姫路店", similar: ["（株）ここいえ姫路店"] },
+  ]);
+  // 登録済みの表記・似た会社が無い新しい会社・空欄は警告しない
+  assert.deepEqual(findSpellingWarnings(["（株）ここいえ姫路店", " 播磨不動産 ", "新しい不動産", "", null, "－"], known), []);
+});
+
+test("同じ取込の中の新しい表記どうしも警告する。同じ名前は1件にまとめる", () => {
+  assert.deepEqual(findSpellingWarnings(["(株)北はりま", "株式会社 北はりま", "(株)北はりま"], []), [
+    { name: "(株)北はりま", similar: ["株式会社 北はりま"] },
+    { name: "株式会社 北はりま", similar: ["(株)北はりま"] },
+  ]);
 });
 
 test("物件へ書く会社情報は空欄と「－」を含めない（物件側の値を消さない）", () => {

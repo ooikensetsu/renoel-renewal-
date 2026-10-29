@@ -18,7 +18,7 @@ import { buildBulkInsert, buildBulkUpdateById } from "@/lib/propertyBulkUpsert";
 import { importKey, planImportMatches } from "@/lib/importMatch";
 import { PROPERTY_FIELDS } from "@/config/propertyFields";
 import { changedPropertyColumns } from "@/lib/propertyCsv";
-import { withAgencyMaster } from "@/lib/agencyMasterDb";
+import { agencySpellingWarnings, withAgencyMaster } from "@/lib/agencyMasterDb";
 import {
   PREF_CODE,
   DEFAULT_CITY_CODE,
@@ -663,9 +663,13 @@ export async function compareCSVData(csvData: IncomingProperty[]) {
       };
     });
 
+    // 登録済みの会社の表記ゆれに見える会社名（2026-10-27）。取り込みは止めず、確認画面に出す
+    const spellingWarnings = await agencySpellingWarnings(importable.map((item) => item.agencyName));
+
     return {
       success: true as const,
       data: results,
+      spellingWarnings,
       // 画面に出して人間に確認してもらうための件数（D-17 手順3）
       summary: {
         total: results.length,

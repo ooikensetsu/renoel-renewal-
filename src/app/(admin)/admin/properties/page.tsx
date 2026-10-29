@@ -26,6 +26,8 @@ import { blankToNull } from "@/lib/blank";
 import BulkImageUpload from "./BulkImageUpload";
 import BulkDisclosureBar from "./BulkDisclosureBar";
 import BulkConfirmationBar from "./BulkConfirmationBar";
+import AgencySpellingWarnings from "./AgencySpellingWarnings";
+import type { SpellingWarning } from "@/lib/agencyMaster";
 import DisclosureBadge from "@/components/DisclosureBadge";
 import AdminPager from "@/components/AdminPager";
 import { paginate, ADMIN_DEFAULT_PER_PAGE } from "@/lib/pagination";
@@ -121,6 +123,7 @@ export default function PropertyManagement() {
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [importStatus, setImportStatus] = useState<"idle" | "parsing" | "preview" | "importing" | "success" | "error">("idle");
   const [diffResults, setDiffResults] = useState<DiffResult[]>([]);
+  const [spellingWarnings, setSpellingWarnings] = useState<SpellingWarning[]>([]);
   const [approvedIndices, setApprovedItems] = useState<Set<number>>(new Set());
   const [errorMessage, setErrorMessage] = useState("");
   // 読み取ったCSVの文字コード。化けたときの切り分けに使う。
@@ -252,6 +255,7 @@ export default function PropertyManagement() {
         // 変わる行を上に出す（掲載確認の戻しでは大半が「変更なし」で、変更が埋もれるため）。
         const sorted = [...res.data].sort((a, b) => PREVIEW_ORDER[a.type] - PREVIEW_ORDER[b.type]);
         setDiffResults(sorted);
+        setSpellingWarnings(res.spellingWarnings);
         // 取り込まない行（掲載会社管理番号が空など）は最初から外し、選べないようにする。
         setApprovedItems(new Set(sorted.flatMap((d, i) => (d.type === "skip" ? [] : [i]))));
         setImportStatus("preview");
@@ -276,6 +280,9 @@ export default function PropertyManagement() {
     if (!window.confirm(
       `${expectedCount}件を取り込みます。\n` +
       `うち ${diffResults.filter((d, i) => approvedIndices.has(i) && d.type === "update").length}件は既存データを上書きします。\n\n` +
+      (spellingWarnings.length > 0
+        ? `表記ゆれの疑いがある会社名が ${spellingWarnings.length} 件あります（確認画面の上の一覧）。\n\n`
+        : "") +
       `上書き前のデータは控えとして保存されますが、実行してよろしいですか？`
     )) {
       return;
@@ -866,6 +873,13 @@ export default function PropertyManagement() {
                       )}
                     </div>
                   </div>
+
+                  <AgencySpellingWarnings
+                    warnings={spellingWarnings}
+                    rowCountOf={(name) =>
+                      diffResults.filter((d) => d.type !== "skip" && blankToNull(d.incoming.agencyName) === name).length
+                    }
+                  />
 
                   <table className="w-full text-left text-xs">
                     <thead>
