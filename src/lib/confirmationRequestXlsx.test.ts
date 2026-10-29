@@ -189,6 +189,18 @@ test("返信先は RENOEL の連絡先にする（様式に入っているモリ
   for (const ref of ["L3", "L4", "L5", "L6"]) assert.doesNotMatch(cell(xml, ref), /モリシタ|姫路|079-29/, ref);
 });
 
+test("共有文字列とファイルのプロパティにもモリシタハウスの社名・連絡先を残さない（送付先がプロパティで見られる）", () => {
+  const { groups } = groupForConfirmation([property()]);
+  const { files } = open(buildConfirmationWorkbook(template, groups, new Date(2026, 9, 15)));
+  const shared = strFromU8(files["xl/sharedStrings.xml"]);
+  const core = strFromU8(files["docProps/core.xml"]);
+  for (const text of [shared, core]) assert.doesNotMatch(text, /モリシタ|姫路|〒670-|079-29/);
+  assert.match(core, /<dc:creator>大井建設工業株式会社<\/dc:creator>/);
+  // セルは共有文字列を番号で参照するため、数を変えない
+  const count = (xml: string) => (xml.match(/<si>/g) ?? []).length;
+  assert.equal(count(shared), count(strFromU8(unzipSync(template)["xl/sharedStrings.xml"])));
+});
+
 test("分譲地名・マンション名の欄はマンションだけ。戸建て・土地の自動の物件名は入れない", () => {
   const { groups } = groupForConfirmation([
     property({ listingCompanyNo: "1", syubetu: 2 }),

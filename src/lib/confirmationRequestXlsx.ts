@@ -357,9 +357,41 @@ export type TemplateBook = {
 
 export type FinishedSheet = { name: string; xml: string; /** 印刷範囲の最終行 */ lastRow: number };
 
+/**
+ * 様式に残るモリシタハウスの連絡先と作成者名を RENOEL の値に置き換える。
+ * 返信先のセルは fillSheet で上書きするが、共有文字列とファイルのプロパティには元の値が残り、
+ * 送付先が Excel の「プロパティ」で見られる。共有文字列はセルが番号で参照するため、数と順番は変えない。
+ */
+function replaceTemplateOwner(files: Record<string, Uint8Array>): void {
+  const owner = /モリシタ|姫路|〒670-|079-/;
+  const replaced = (text: string): string => {
+    if (text.includes("〒670-")) return CONFIRMATION_REPLY_TO.address;
+    if (/^TEL：/.test(text)) return `TEL：${CONFIRMATION_REPLY_TO.tel}`;
+    if (/^FAX：/.test(text)) return `FAX：${CONFIRMATION_REPLY_TO.fax}`;
+    if (text === "株式会社モリシタハウス") return CONFIRMATION_REPLY_TO.name;
+    return text.replace(/モリシタハウス/g, "弊社").replace(/姫路市〇〇区/g, "〇〇市");
+  };
+  files["xl/sharedStrings.xml"] = strToU8(
+    strFromU8(files["xl/sharedStrings.xml"]).replace(/<si>([\s\S]*?)<\/si>/g, (si, inner: string) => {
+      // ふりがな（rPh）は読みだけで、表示される文字ではない
+      const text = inner.replace(/<rPh[\s\S]*?<\/rPh>/g, "").replace(/<[^>]+>/g, "");
+      return owner.test(text) ? `<si><t>${escapeXml(replaced(text))}</t></si>` : si;
+    })
+  );
+  files["docProps/core.xml"] = strToU8(
+    strFromU8(files["docProps/core.xml"])
+      .replace(/<dc:creator>[\s\S]*?<\/dc:creator>/, `<dc:creator>${escapeXml(CONFIRMATION_REPLY_TO.name)}</dc:creator>`)
+      .replace(
+        /<cp:lastModifiedBy>[\s\S]*?<\/cp:lastModifiedBy>/,
+        `<cp:lastModifiedBy>${escapeXml(CONFIRMATION_REPLY_TO.name)}</cp:lastModifiedBy>`
+      )
+  );
+}
+
 /** 様式を開き、表のシート以外（使い方・計算順の記録・プリンター設定）を外す。 */
 export function openTemplate(template: Uint8Array): TemplateBook {
   const files = unzipSync(template);
+  replaceTemplateOwner(files);
   const sheetTemplate = strFromU8(files[SHEET_PATH]);
   const styles = new TemplateStyles(strFromU8(files["xl/styles.xml"]));
   for (const path of Object.keys(files)) {
