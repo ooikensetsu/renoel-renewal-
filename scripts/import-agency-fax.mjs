@@ -62,6 +62,10 @@ async function importFax(argv) {
   console.log(`  同じ会社に違うFAXがある（書かない）：${plan.conflicting.length}社`);
   for (const c of plan.conflicting) console.log(`    ${c.agencyName}：${c.faxes.join(" / ")}`);
   console.log(`  取扱会社に見つからない：${plan.unknown.length}社 ${plan.unknown.slice(0, 20).join("、")}${plan.unknown.length > 20 ? " ほか" : ""}`);
+  console.log(`  全角半角・空白の違いだけで一致：${plan.matchedLoosely.length}社（上の「台帳へ入れる」に含む）`);
+  for (const m of plan.matchedLoosely) console.log(`    ${m.csvName} → ${m.agencyName}`);
+  console.log(`  2社以上に当たる（書かない）：${plan.ambiguous.length}社`);
+  for (const a of plan.ambiguous) console.log(`    ${a.csvName}：${a.candidates.join(" / ")}`);
   console.log(`  FAXの形が読めない：${plan.invalid.length}行`);
   for (const i of plan.invalid) console.log(`    ${i.agencyName}：${i.fax}`);
 

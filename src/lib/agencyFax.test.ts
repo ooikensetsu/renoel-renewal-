@@ -61,3 +61,30 @@ test("同じ会社に違うFAXが2つあれば書かない。知らない会社�
   assert.deepEqual(plan.unknown, ["E社"]);
   assert.deepEqual(plan.invalid, [{ agencyName: "C建設", fax: "123" }]);
 });
+
+test("全角半角・空白の違いだけなら物件の会社名へ当てる。会社の種類が違う・2社に当たるものは書かない", () => {
+  const loose = {
+    aliases: new Map<string, string>(),
+    knownNames: new Set(["クラージュ（株）", "Ｆ不動産 本店", "(有)G住宅", "Ｈ建設（株）", "Ｈ建設 (株)"]),
+    currentFax: new Map<string, string | null>(),
+  };
+  const plan = planFaxImport(
+    [
+      { agencyName: "クラージュ(株)", fax: "079-000-0011" },
+      { agencyName: "F不動産本店", fax: "079-000-0012" },
+      { agencyName: "(株)G住宅", fax: "079-000-0013" },
+      { agencyName: "H建設(株)", fax: "079-000-0014" },
+    ],
+    loose
+  );
+  assert.deepEqual(plan.write, [
+    { agencyName: "クラージュ（株）", fax: "079-000-0011", createAgency: true },
+    { agencyName: "Ｆ不動産 本店", fax: "079-000-0012", createAgency: true },
+  ]);
+  assert.deepEqual(plan.matchedLoosely, [
+    { csvName: "クラージュ(株)", agencyName: "クラージュ（株）" },
+    { csvName: "F不動産本店", agencyName: "Ｆ不動産 本店" },
+  ]);
+  assert.deepEqual(plan.unknown, ["(株)G住宅"]);
+  assert.deepEqual(plan.ambiguous, [{ csvName: "H建設(株)", candidates: ["Ｈ建設（株）", "Ｈ建設 (株)"] }]);
+});

@@ -30,6 +30,10 @@ export type FaxPlan = {
   differs: { agencyName: string; current: string; incoming: string }[];
   /** 取扱会社として見つからない会社名 */
   unknown: string[];
+  /** 全角半角・空白の違いだけで一致した会社名（CSV → 物件・台帳の会社名）。目で確かめるために出す */
+  matchedLoosely: { csvName: string; agencyName: string }[];
+  /** 全角半角・空白を無視すると2社以上に当たる会社名（書かない） */
+  ambiguous: { csvName: string; candidates: string[] }[];
   /** 同じ会社に違うFAXが2つ以上ある（どちらも書かない） */
   conflicting: { agencyName: string; faxes: string[] }[];
   /** FAXの形が読めない行 */
@@ -46,7 +50,8 @@ export function planFaxImport(
     currentFax: ReadonlyMap<string, string | null>;
   }
 ): FaxPlan {
-  const plan: FaxPlan = { write: [], same: [], differs: [], unknown: [], conflicting: [], invalid: [] };
+  const plan: FaxPlan = { write: [], same: [], differs: [], unknown: [], matchedLoosely: [], ambiguous: [], conflicting: [], invalid: [] };
+  const knownByLooseKey = groupByLooseKey(ctx.knownNames);
   const faxesOf = new Map<string, Set<string>>();
   for (const row of rows) {
     const rawName = agencyNameOf(row.agencyName ?? row["取扱会社名"]);
@@ -57,11 +62,8 @@ export function planFaxImport(
       plan.invalid.push({ agencyName: rawName, fax: rawFax });
       continue;
     }
-    const name = ctx.aliases.get(rawName) ?? rawName;
-    if (!ctx.knownNames.has(name)) {
-      if (!plan.unknown.includes(rawName)) plan.unknown.push(rawName);
-      continue;
-    }
+    const name = resolveKnownName(ctx.aliases.get(rawName) ?? rawName, rawName, ctx.knownNames, knownByLooseKey, plan);
+    if (name === null) continue;
     faxesOf.set(name, (faxesOf.get(name) ?? new Set()).add(fax));
   }
   for (const [agencyName, faxes] of faxesOf) {
@@ -80,4 +82,41 @@ export function planFaxImport(
     }
   }
   return plan;
+}
+
+/**
+ * 会社名の比べ方をゆるめた形。全角半角（（株）と(株)など）と空白だけを無視する。
+ * 会社の種類（株・有）は区別したまま（sameCompanyKey より狭い。別会社を取り違えないため）。
+ * 文字認識の候補一覧は半角、物件の会社名は全角で入っていることが多い（2026-10-26 本番で267社が不一致）。
+ */
+function looseKey(name: string): string {
+  return name.normalize("NFKC").replace(/\s+/g, "");
+}
+
+function groupByLooseKey(names: ReadonlySet<string>): Map<string, string[]> {
+  const groups = new Map<string, string[]>();
+  for (const name of names) groups.set(looseKey(name), [...(groups.get(looseKey(name)) ?? []), name]);
+  return groups;
+}
+
+/** 物件・台帳の会社名を返す。完全一致が無ければゆるめて1社だけに当たるときに限り使う。見つからなければ plan に記録して null */
+function resolveKnownName(
+  name: string,
+  csvName: string,
+  knownNames: ReadonlySet<string>,
+  knownByLooseKey: ReadonlyMap<string, string[]>,
+  plan: FaxPlan
+): string | null {
+  if (knownNames.has(name)) return name;
+  const candidates = knownByLooseKey.get(looseKey(name)) ?? [];
+  if (candidates.length === 1) {
+    if (!plan.matchedLoosely.some((m) => m.csvName === csvName)) plan.matchedLoosely.push({ csvName, agencyName: candidates[0] });
+    return candidates[0];
+  }
+  if (candidates.length > 1) {
+    if (!plan.ambiguous.some((a) => a.csvName === csvName)) plan.ambiguous.push({ csvName, candidates });
+  } else if (!plan.unknown.includes(csvName)) {
+    plan.unknown.push(csvName);
+  }
+  return null;
 }
