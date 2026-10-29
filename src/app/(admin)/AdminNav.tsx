@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
 import {
   LayoutDashboard, Users, Building2, MessageSquare, MailWarning,
-  ExternalLink, LogOut,
+  ExternalLink, LogOut, ArrowDownAZ,
 } from "lucide-react";
 
 /**
@@ -20,6 +20,7 @@ const ITEMS = [
   { href: "/admin", label: "ダッシュボード", icon: LayoutDashboard },
   { href: "/admin/users", label: "会員管理", icon: Users },
   { href: "/admin/properties", label: "物件管理", icon: Building2 },
+  { href: "/admin/agency-readings", label: "取扱会社の読み", icon: ArrowDownAZ },
   { href: "/admin/inquiries", label: "お問い合わせ管理", icon: MessageSquare },
   { href: "/admin/mail-logs", label: "メール送信ログ", icon: MailWarning },
 ];

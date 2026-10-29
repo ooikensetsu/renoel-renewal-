@@ -250,3 +250,14 @@ model MailLog {
 
   @@index([status, createdAt])
 }
+
+/// 取扱会社名の読み（2026-10-19）。物件確認依頼書を取扱会社の50音順に並べるために使う。
+/// 物件の agencyName（前後の空白を除いた値）と一致させる。管理画面 /admin/agency-readings で登録する。
+model AgencyReading {
+  agencyName String   @id
+  /// ひらがな。会社の種類（株式会社・(株) など）は含めない
+  reading    String
+  /// 辞書で推定した読みのまま（人がまだ確かめていない）なら true
+  estimated  Boolean  @default(false)
+  updatedAt  DateTime @updatedAt
+}

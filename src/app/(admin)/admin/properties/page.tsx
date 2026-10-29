@@ -10,7 +10,9 @@ import {
   groupForConfirmation,
   type ConfirmationProperty,
 } from "@/lib/confirmationRequestXlsx";
+import { buildConfirmationBook } from "@/lib/confirmationBookXlsx";
 import { confirmationTemplate } from "@/lib/confirmationTemplate";
+import { getAgencyReadingMap } from "@/app/actions/agencyReadings";
 import { blankToNull } from "@/lib/blank";
 import BulkImageUpload from "./BulkImageUpload";
 import BulkDisclosureBar from "./BulkDisclosureBar";
@@ -91,6 +93,8 @@ function levelChangeText(diff: DiffResult): string | null {
 
 export default function PropertyManagement() {
   const [properties, setProperties] = useState<PropertyRow[]>([]);
+  // 取扱会社名 → 読み。確認依頼書を50音順に並べるために使う（/admin/agency-readings で登録）
+  const [agencyReadings, setAgencyReadings] = useState<ReadonlyMap<string, string>>(new Map());
   const [isLoading, setIsLoading] = useState(true);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [importStatus, setImportStatus] = useState<"idle" | "parsing" | "preview" | "importing" | "success" | "error">("idle");
@@ -129,12 +133,15 @@ export default function PropertyManagement() {
 
   // 取得だけを行う（useEffect の同期本体で setState しないため分けている）
   const fetchProperties = async () => {
-    const res = await getProperties();
+    const [res, readingRes] = await Promise.all([getProperties(), getAgencyReadingMap()]);
     if (res.success) {
       setProperties(res.data as PropertyRow[]);
     } else {
       setErrorMessage(res.error);
     }
+    // 読みが取れなくても一覧は使えるようにする（確認依頼書が会社名順になるだけ）
+    if (readingRes.success) setAgencyReadings(new Map(Object.entries(readingRes.data)));
+    else setErrorMessage(readingRes.error);
   };
 
   const loadProperties = async () => {
@@ -268,13 +275,15 @@ export default function PropertyManagement() {
   };
   // 掲載の確認を取扱会社へ依頼する書面（2026-10-15）。絞り込み中の物件を会社ごとにまとめ、
   // モリシタハウスの様式（物件確認依頼）に書き込んだ Excel を作る。様式と欄は src/lib/confirmationRequestXlsx.ts。
-  // 1社なら xlsx を1つ、2社以上なら会社ごとの xlsx を zip にまとめて渡す。
+  // 会社は読みの50音順に並べる（2026-10-19）。出し方は2通り。
+  //   一括印刷：全社を1冊・1シートに並べ、会社ごとに改ページ（まとめて印刷する用）
+  //   会社別　：会社ごとの xlsx を50音順の通し番号付きで zip にまとめる（FAX を会社ごとに送る用）。1社なら xlsx を1つ
   const confirmationGroups = useMemo(
-    () => groupForConfirmation(visibleProperties as unknown as ConfirmationProperty[]),
-    [visibleProperties]
+    () => groupForConfirmation(visibleProperties as unknown as ConfirmationProperty[], agencyReadings),
+    [visibleProperties, agencyReadings]
   );
-  const handleConfirmationExport = () => {
-    const { groups, skipped } = confirmationGroups;
+  const handleConfirmationExport = (mode: "book" | "each") => {
+    const { groups, skipped, unread } = confirmationGroups;
     if (groups.length === 0) {
       setErrorMessage("取扱会社が登録された物件がありません。確認依頼書は会社ごとに作るため、取扱会社が必要です。");
       return;
@@ -282,24 +291,35 @@ export default function PropertyManagement() {
     const now = new Date();
     const pad = (n: number) => String(n).padStart(2, "0");
     const date = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}`;
-    const single = groups.length === 1;
-    const bytes = single
-      ? buildConfirmationWorkbook(confirmationTemplate(), groups, now)
-      : buildConfirmationZip(confirmationTemplate(), groups, now, date);
-    const blob = new Blob([bytes as BlobPart], {
-      type: single ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" : "application/zip",
-    });
+    const XLSX_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+    let bytes: Uint8Array;
+    let fileName: string;
+    let summary: string;
+    if (mode === "book") {
+      const book = buildConfirmationBook(confirmationTemplate(), groups, now);
+      bytes = book.bytes;
+      fileName = `物件確認依頼_一括印刷_${groups.length}社_${date}.xlsx`;
+      summary = `全社を1冊にまとめた確認依頼書を作りました（${groups.length}社・${book.pages}ページ）。`;
+    } else if (groups.length === 1) {
+      bytes = buildConfirmationWorkbook(confirmationTemplate(), groups, now);
+      fileName = `${confirmationFileName(groups[0].agencyName, date, new Set())}.xlsx`;
+      summary = "確認依頼書を作りました（1社）。";
+    } else {
+      bytes = buildConfirmationZip(confirmationTemplate(), groups, now, date);
+      fileName = `物件確認依頼_会社別_${groups.length}社_${date}.zip`;
+      summary = `会社ごとの確認依頼書を zip にまとめました（${groups.length}社・ファイル名の番号が50音順）。`;
+    }
+    const isZip = fileName.endsWith(".zip");
+    const blob = new Blob([bytes as BlobPart], { type: isZip ? "application/zip" : XLSX_TYPE });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
-    link.download = single
-      ? `${confirmationFileName(groups[0].agencyName, date, new Set())}.xlsx`
-      : `物件確認依頼_${groups.length}社_${date}.zip`;
+    link.download = fileName;
     link.click();
     setTimeout(() => URL.revokeObjectURL(link.href), 1000);
     setErrorMessage("");
     setNotice(
-      `確認依頼書を作りました（${groups.length}社）。` +
-        (single ? "" : "会社ごとの Excel を zip にまとめています。") +
+      summary +
+        (unread > 0 ? `読みが未登録の${unread}社は最後に会社名順で並べています（「取扱会社の読み」で登録できます）。` : "") +
         (skipped > 0 ? `取扱会社が未登録の${skipped}件は含めていません。` : "")
     );
   };
@@ -392,11 +412,18 @@ export default function PropertyManagement() {
             <Download size={18} /> 一括出力 (CSV・{visibleProperties.length}件)
           </button>
           <button
-            onClick={handleConfirmationExport}
+            onClick={() => handleConfirmationExport("book")}
             disabled={confirmationGroups.groups.length === 0}
             className="bg-white border border-reno-line px-4 py-2.5 rounded-xl flex items-center gap-2 text-sm font-bold text-ink hover:bg-reno-bg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <FileSpreadsheet size={18} /> 確認依頼書 (Excel・{confirmationGroups.groups.length}社)
+            <FileSpreadsheet size={18} /> 確認依頼書・一括印刷 (1冊・{confirmationGroups.groups.length}社)
+          </button>
+          <button
+            onClick={() => handleConfirmationExport("each")}
+            disabled={confirmationGroups.groups.length === 0}
+            className="bg-white border border-reno-line px-4 py-2.5 rounded-xl flex items-center gap-2 text-sm font-bold text-ink hover:bg-reno-bg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <FileSpreadsheet size={18} /> 確認依頼書・会社別 ({confirmationGroups.groups.length}社)
           </button>
           <BulkImageUpload />
           {/* 2026-10-08 手動登録の画面を作り、撤去していた「物件を登録」を戻した */}

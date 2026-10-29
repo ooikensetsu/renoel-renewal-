@@ -24,6 +24,7 @@ import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import { DISCLOSURE_LEVEL_LABEL, type DisclosureLevel } from "../config/security.ts";
 import { PROPERTY_TYPE, PROPERTY_TYPE_LABEL } from "../config/property.ts";
 import { isBlankMark } from "./blank.ts";
+import { compareAgencies } from "./agencyReading.ts";
 
 export const ROWS_PER_SHEET = 10;
 /** 1件目の上段の行。1件は上下2行を使う（様式の12〜31行目）。 */
@@ -45,6 +46,8 @@ export type ConfirmationProperty = {
 
 export type ConfirmationGroup = {
   agencyName: string;
+  /** 50音順に並べるための読み。未登録なら null（並びの最後に置く） */
+  reading: string | null;
   agencyTel: string;
   properties: ConfirmationProperty[];
 };
@@ -52,12 +55,19 @@ export type ConfirmationGroup = {
 const text = (value: unknown) => (isBlankMark(value) ? "" : String(value).trim());
 
 /**
- * 取扱会社ごとにまとめる。会社名順、会社の中は掲載会社管理番号順。
+ * 取扱会社ごとにまとめる。会社は読みの50音順（2026-10-19。読みの無い会社は最後に会社名順）、
+ * 会社の中は掲載会社管理番号順。
  * 電話番号は物件ごとに入っているため、最初に見つかった番号を使う。
+ * @param readings 会社名 → 読み（AgencyReading 表の値）
  */
-export function groupForConfirmation(properties: readonly ConfirmationProperty[]): {
+export function groupForConfirmation(
+  properties: readonly ConfirmationProperty[],
+  readings: ReadonlyMap<string, string> = new Map()
+): {
   groups: ConfirmationGroup[];
   skipped: number;
+  /** 読みが未登録の会社の数 */
+  unread: number;
 } {
   const byAgency = new Map<string, ConfirmationGroup>();
   let skipped = 0;
@@ -67,18 +77,23 @@ export function groupForConfirmation(properties: readonly ConfirmationProperty[]
       skipped++;
       continue;
     }
-    const group = byAgency.get(name) ?? { agencyName: name, agencyTel: "", properties: [] };
+    const group = byAgency.get(name) ?? {
+      agencyName: name,
+      reading: readings.get(name) || null,
+      agencyTel: "",
+      properties: [],
+    };
     if (group.agencyTel === "") group.agencyTel = text(p.agencyTel);
     group.properties.push(p);
     byAgency.set(name, group);
   }
-  const groups = [...byAgency.values()].sort((a, b) => a.agencyName.localeCompare(b.agencyName, "ja"));
+  const groups = [...byAgency.values()].sort(compareAgencies);
   for (const g of groups) {
     g.properties.sort((a, b) =>
       text(a.listingCompanyNo).localeCompare(text(b.listingCompanyNo), "ja", { numeric: true })
     );
   }
-  return { groups, skipped };
+  return { groups, skipped, unread: groups.filter((g) => !g.reading).length };
 }
 
 function escapeXml(value: string): string {
@@ -246,7 +261,7 @@ export function confirmationSheetName(
 }
 
 /** 1枚分のシートを作る。 */
-function fillSheet(
+export function fillSheet(
   template: string,
   styles: TemplateStyles,
   group: ConfirmationGroup,
@@ -293,7 +308,7 @@ const SHEET_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.
 const REL = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
 
 /**
- * 確認依頼書の xlsx を作る。
+ * 確認依頼書の xlsx を作る。会社ごと・10件ごとに1シート。
  * @param template 様式の xlsx（confirmationTemplate() の値）
  * @param today    依頼日（様式の L1。開いたときに TODAY() で付け直される）
  */
@@ -303,28 +318,45 @@ export function buildConfirmationWorkbook(
   today: Date
 ): Uint8Array {
   if (groups.length === 0) throw new Error("取扱会社が登録された物件がありません");
-  const files = unzipSync(template);
-  const sheetTemplate = strFromU8(files[SHEET_PATH]);
+  const book = openTemplate(template);
   const serial = excelDateSerial(today);
-  const styles = new TemplateStyles(strFromU8(files["xl/styles.xml"]));
-
-  // 様式の表のシート以外（使い方・計算順の記録・プリンター設定）を外す
-  for (const path of Object.keys(files)) {
-    if (/^xl\/worksheets\/|^xl\/calcChain\.xml$|^xl\/printerSettings\//.test(path)) delete files[path];
-  }
-
   const used = new Set<string>();
-  const sheets: { name: string; path: string }[] = [];
+  const sheets: FinishedSheet[] = [];
   for (const group of groups) {
     const pages = Math.ceil(group.properties.length / ROWS_PER_SHEET);
     for (let page = 1; page <= pages; page++) {
-      const n = sheets.length + 1;
-      const path = `xl/worksheets/sheet${n}.xml`;
-      files[path] = strToU8(fillSheet(sheetTemplate, styles, group, page, pages, serial, n === 1));
-      sheets.push({ name: confirmationSheetName(group.agencyName, page, pages, used), path });
+      const xml = fillSheet(book.sheetTemplate, book.styles, group, page, pages, serial, sheets.length === 0);
+      sheets.push({ name: confirmationSheetName(group.agencyName, page, pages, used), xml, lastRow: 33 });
     }
   }
+  return finishWorkbook(book, sheets);
+}
 
+export type TemplateBook = {
+  files: Record<string, Uint8Array>;
+  /** 様式の表のシート（1枚分）の XML */
+  sheetTemplate: string;
+  styles: TemplateStyles;
+};
+
+export type FinishedSheet = { name: string; xml: string; /** 印刷範囲の最終行 */ lastRow: number };
+
+/** 様式を開き、表のシート以外（使い方・計算順の記録・プリンター設定）を外す。 */
+export function openTemplate(template: Uint8Array): TemplateBook {
+  const files = unzipSync(template);
+  const sheetTemplate = strFromU8(files[SHEET_PATH]);
+  const styles = new TemplateStyles(strFromU8(files["xl/styles.xml"]));
+  for (const path of Object.keys(files)) {
+    if (/^xl\/worksheets\/|^xl\/calcChain\.xml$|^xl\/printerSettings\//.test(path)) delete files[path];
+  }
+  return { files, sheetTemplate, styles };
+}
+
+/** 作ったシートを入れ、シートの一覧・印刷範囲・参照先を作り直して xlsx に仕上げる。 */
+export function finishWorkbook(book: TemplateBook, finished: readonly FinishedSheet[]): Uint8Array {
+  const { files, styles } = book;
+  const sheets = finished.map((s, i) => ({ ...s, path: `xl/worksheets/sheet${i + 1}.xml` }));
+  for (const s of sheets) files[s.path] = strToU8(s.xml);
   files["xl/styles.xml"] = strToU8(styles.toXml());
 
   // workbook.xml：シートの一覧と印刷範囲を作り直す。開いたときに数式（日付・件数）を計算させる
@@ -342,7 +374,7 @@ export function buildConfirmationWorkbook(
       `<definedNames>${sheets
         .map(
           (s, i) =>
-            `<definedName name="_xlnm.Print_Area" localSheetId="${i}">${escapeXml(quoted(s.name))}!$A$1:$R$33</definedName>`
+            `<definedName name="_xlnm.Print_Area" localSheetId="${i}">${escapeXml(quoted(s.name))}!$A$1:$R$${s.lastRow}</definedName>`
         )
         .join("")}</definedNames>`
     )
@@ -397,9 +429,10 @@ export function confirmationFileName(agencyName: string, date: string, used: Set
 }
 
 /**
- * 複数社の確認依頼書を、会社ごとに1つの xlsx にして zip にまとめる。
- * 1冊に全社を入れた版（817社・942枚）は、Excel が開いている途中で応答しなくなった（2026-10-15）。
- * 送付も会社ごとに行うため、ファイルを分ける。
+ * 複数社の確認依頼書を、会社ごとに1つの xlsx にして zip にまとめる（FAX を会社ごとに送るため）。
+ * 1冊に全社を別シートで入れた版（817社・942枚）は、Excel が開いている途中で応答しなくなった（2026-10-15）。
+ * 全社を一括で印刷するときは confirmationBookXlsx.ts の1冊を使う。
+ * ファイル名の頭に50音順の通し番号（001_）を付け、名前順に並べると50音順になるようにする（2026-10-19）。
  */
 export function buildConfirmationZip(
   template: Uint8Array,
@@ -410,9 +443,15 @@ export function buildConfirmationZip(
   if (groups.length === 0) throw new Error("取扱会社が登録された物件がありません");
   const used = new Set<string>();
   const files: Record<string, Uint8Array> = {};
-  for (const group of groups) {
+  const digits = Math.max(3, String(groups.length).length);
+  groups.forEach((group, i) => {
+    const order = String(i + 1).padStart(digits, "0");
     // xlsx はすでに圧縮されているため、zip では圧縮しない（時間がかかるだけで小さくならない）
-    files[`${confirmationFileName(group.agencyName, date, used)}.xlsx`] = buildConfirmationWorkbook(template, [group], today);
-  }
+    files[`${order}_${confirmationFileName(group.agencyName, date, used)}.xlsx`] = buildConfirmationWorkbook(
+      template,
+      [group],
+      today
+    );
+  });
   return zipSync(files, { level: 0 });
 }

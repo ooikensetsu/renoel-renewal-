@@ -101,6 +101,30 @@ test("取扱会社ごとにまとめ、会社名順・掲載会社管理番号�
   assert.equal(groups[1].agencyTel, "079-111-1111");
 });
 
+test("読みがあれば会社を50音順に並べ、読みの無い会社は最後に会社名順で置く", () => {
+  const { groups, unread } = groupForConfirmation(
+    [
+      property({ agencyName: "播磨不動産（株）" }),
+      property({ agencyName: "(株)赤鹿地所" }),
+      property({ agencyName: "（株）髙岡エステート" }),
+      property({ agencyName: "タカセ不動産(株) 姫路店" }),
+      property({ agencyName: "(株)タテイワ" }),
+    ],
+    new Map([
+      ["播磨不動産（株）", "はりまふどうさん"],
+      ["(株)赤鹿地所", "あかしかじしょ"],
+      ["タカセ不動産(株) 姫路店", "たかせふどうさん ひめじてん"],
+    ])
+  );
+  assert.deepEqual(
+    groups.map((g) => g.agencyName),
+    ["(株)赤鹿地所", "タカセ不動産(株) 姫路店", "播磨不動産（株）", "(株)タテイワ", "（株）髙岡エステート"]
+  );
+  assert.equal(unread, 2);
+  assert.equal(groups[0].reading, "あかしかじしょ");
+  assert.equal(groups[4].reading, null);
+});
+
 test("様式の欄に値が入る（弊社管理番号＝掲載会社管理番号、直近確認時の状況＝公開状態）", () => {
   const { groups } = groupForConfirmation([
     property({ disclosureLevel: 1, syubetu: 3, landMen: null, bldMen: 65.2, title: "A&B <マンション>" }),
@@ -254,7 +278,7 @@ test("取扱会社が1社も無ければ作らない", () => {
   assert.throws(() => buildConfirmationWorkbook(template, [], new Date()), /取扱会社が登録された物件がありません/);
 });
 
-test("複数社は会社ごとの xlsx を zip にまとめる（1冊に全社を入れると Excel が応答しなくなった）", () => {
+test("複数社は会社ごとの xlsx を zip にまとめ、ファイル名の頭に50音順の通し番号を付ける", () => {
   const { groups } = groupForConfirmation([
     property({ agencyName: "(株)タテイワ" }),
     property({ agencyName: "くらすONE(株)" }),
@@ -262,10 +286,10 @@ test("複数社は会社ごとの xlsx を zip にまとめる（1冊に全社�
   ]);
   const zip = unzipSync(buildConfirmationZip(template, groups, new Date(2026, 9, 15), "20261015"));
   assert.deepEqual(Object.keys(zip), [
-    "物件確認依頼_(株)タテイワ_20261015.xlsx",
-    "物件確認依頼_くらすONE(株)_20261015.xlsx",
+    "001_物件確認依頼_(株)タテイワ_20261015.xlsx",
+    "002_物件確認依頼_くらすONE(株)_20261015.xlsx",
   ]);
-  const { names, sheets } = open(zip["物件確認依頼_くらすONE(株)_20261015.xlsx"]);
+  const { names, sheets } = open(zip["002_物件確認依頼_くらすONE(株)_20261015.xlsx"]);
   assert.deepEqual(names, ["くらすONE(株)"]);
   assert.equal(cell(sheets[0], "O1"), "2件");
 });
