@@ -178,6 +178,17 @@ test("様式の欄に値が入る（弊社管理番号＝掲載会社管理番�
   assert.match(xml, /<c r="G12" s="33"><v>1850<\/v><\/c>/);
 });
 
+test("返信先は RENOEL の連絡先にする（様式に入っているモリシタハウスの連絡先を残さない）", () => {
+  const { groups } = groupForConfirmation([property()]);
+  const { sheets } = open(buildConfirmationWorkbook(template, groups, new Date(2026, 9, 15)));
+  const xml = sheets[0];
+  assert.equal(cell(xml, "L3"), "大井建設工業株式会社");
+  assert.equal(cell(xml, "L4"), "〒385-0029　長野県佐久市佐久平駅南9-1");
+  assert.equal(cell(xml, "L5"), "TEL：0120-556-119");
+  assert.equal(cell(xml, "L6"), "FAX：【要確認】");
+  for (const ref of ["L3", "L4", "L5", "L6"]) assert.doesNotMatch(cell(xml, ref), /モリシタ|姫路|079-29/, ref);
+});
+
 test("分譲地名・マンション名の欄はマンションだけ。戸建て・土地の自動の物件名は入れない", () => {
   const { groups } = groupForConfirmation([
     property({ listingCompanyNo: "1", syubetu: 2 }),

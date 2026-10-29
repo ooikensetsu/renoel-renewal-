@@ -24,6 +24,7 @@
 import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import { PROPERTY_TYPE, PROPERTY_TYPE_LABEL } from "../config/property.ts";
 import { isBlankMark } from "./blank.ts";
+import { CONFIRMATION_REPLY_TO } from "../config/company.ts";
 import { compareAgencies } from "./agencyReading.ts";
 
 export const ROWS_PER_SHEET = 10;
@@ -293,6 +294,11 @@ export function fillSheet(
   xml = setCell(xml, "C4", group.agencyTel ? `TEL: ${group.agencyTel}` : "TEL:");
   // 台帳にFAXが無い会社は、様式の「000-000-0000」を消し、手書きできるよう空ける
   xml = setCell(xml, "F4", group.agencyFax ? `FAX: ${group.agencyFax}` : "FAX:");
+  // 返信先。様式にはモリシタハウスの連絡先が入っているため、RENOEL の値で上書きする
+  xml = setCell(xml, "L3", CONFIRMATION_REPLY_TO.name);
+  xml = setCell(xml, "L4", CONFIRMATION_REPLY_TO.address);
+  xml = setCell(xml, "L5", `TEL：${CONFIRMATION_REPLY_TO.tel}`);
+  xml = setCell(xml, "L6", `FAX：${CONFIRMATION_REPLY_TO.fax}`);
   xml = setCell(xml, "R1", `${page}/${pages}頁`);
   xml = setCachedValue(xml, "L1", today);
   xml = setCachedValue(xml, "O1", `${rows.length}件`);

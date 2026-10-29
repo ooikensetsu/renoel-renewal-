@@ -29,6 +29,18 @@ export const COMPANY = {
 } as const;
 
 /**
+ * 物件確認依頼書（Excel）の返信先。取扱会社がFAXで返す宛先として、様式の L3〜L6 に書く。
+ * 様式はモリシタ版から移植したもので、返信先にモリシタハウスの社名・住所・電話・FAXが入っていた。
+ * 【要確認】FAX番号は未入手。電話を問い合わせ用のフリーダイヤルのままにするかも未確認。
+ */
+export const CONFIRMATION_REPLY_TO = {
+  name: COMPANY.legalName,
+  address: `〒${COMPANY.zip}　${COMPANY.address}`,
+  tel: COMPANY.tel,
+  fax: "【要確認】",
+} as const;
+
+/**
  * メール差出人。
  * 【要確認】noreply@renoel.example.com は create 時のプレースホルダのまま本番に残っていた。
  * 実在する送信ドメインへ差し替えること（example.com 宛は到達しない／なりすまし判定される）。
