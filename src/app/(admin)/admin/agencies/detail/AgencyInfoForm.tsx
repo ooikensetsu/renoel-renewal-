@@ -26,14 +26,17 @@ const FIELDS: { key: keyof AgencyForm; label: string; toProperties?: boolean; mu
   { key: "memo", label: "メモ（社内向け）", multiline: true },
 ];
 
-/** 入力欄の初期値。台帳に無い会社は、物件に一番多く入っている値を出す。 */
+/**
+ * 入力欄の初期値。台帳で空の項目（所在地・電話・免許番号）は、物件に一番多く入っている値を出す。
+ * FAXだけを一括で入れた会社（scripts/import-agency-fax.mjs）でも、ほかの項目が空欄で表示されないようにするため。
+ */
 function initialForm(detail: AgencyDetail): AgencyForm {
   const form = {} as AgencyForm;
   for (const f of FIELDS) {
     const fromAgency = detail.agency?.[f.key] ?? null;
     const fromProperties =
       f.key === "address" || f.key === "tel" || f.key === "license" ? detail.fieldVariants[f.key][0]?.value : undefined;
-    form[f.key] = fromAgency ?? (detail.registered ? "" : (fromProperties ?? ""));
+    form[f.key] = fromAgency ?? fromProperties ?? "";
   }
   return form;
 }
@@ -85,7 +88,7 @@ export default function AgencyInfoForm({ agency }: { agency: AgencyDetail }) {
         <h2 id="agency-info" className="text-lg font-bold text-ink">会社情報</h2>
         <p className="text-sm text-reno-mute-dark mt-1">
           「物件にも反映」の3項目は、保存するとこの会社の全物件に書き込みます。空欄の項目は物件側を消しません。
-          {!agency.registered && " 未登録のため、物件に一番多く入っている値を初期値にしています。"}
+          {" 台帳で空の所在地・電話・免許番号には、物件に一番多く入っている値を初期値として表示しています。"}
         </p>
       </div>
 
