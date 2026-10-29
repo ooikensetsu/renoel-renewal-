@@ -261,3 +261,30 @@ model AgencyReading {
   estimated  Boolean  @default(false)
   updatedAt  DateTime @updatedAt
 }
+
+/// 取扱会社の台帳（2026-10-22）。管理画面 /admin/agencies で登録する。
+/// name は物件の agencyName（前後の空白を除いた値）と一致させる。物件とは名前でつながる（外部キーは張らない）。
+/// 所在地・電話・免許番号は会社側が正本で、保存するとその会社の物件にも書き込む（src/lib/agencyMaster.ts）。
+model Agency {
+  name         String   @id
+  address      String?
+  tel          String?
+  fax          String?
+  /// 宅地建物取引業の免許番号
+  license      String?
+  contactName  String?
+  contactEmail String?
+  /// 社内向けのメモ。サイトには出さない
+  memo         String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+/// 統合した会社の旧表記（2026-10-22）。CSV取込・手動登録で旧表記が来たら agencyName（正式名）へ読み替える。
+model AgencyAlias {
+  alias      String   @id
+  agencyName String
+  createdAt  DateTime @default(now())
+
+  @@index([agencyName])
+}

@@ -18,6 +18,7 @@ import { buildBulkInsert, buildBulkUpdateById } from "@/lib/propertyBulkUpsert";
 import { importKey, planImportMatches } from "@/lib/importMatch";
 import { PROPERTY_FIELDS } from "@/config/propertyFields";
 import { changedPropertyColumns } from "@/lib/propertyCsv";
+import { withAgencyMaster } from "@/lib/agencyMasterDb";
 import {
   PREF_CODE,
   DEFAULT_CITY_CODE,
@@ -610,6 +611,8 @@ export async function compareCSVData(csvData: IncomingProperty[]) {
   }
 
   try {
+    // 統合済みの旧表記は正式名へ読み替え、会社情報は取扱会社の台帳の値にする（2026-10-22）
+    csvData = await withAgencyMaster(csvData);
     // 取り込めない行は先に分け、画面に理由つきで出す（黙って捨てない）。
     const importable = csvData.filter((item) => skipReasonOf(item) === null);
     // 突合対象は1回の問い合わせでまとめて引く。
@@ -710,6 +713,14 @@ export async function importProperties(
   }
   if (approvedItems.length === 0) {
     return { success: false as const, error: "取込対象がありません。" };
+  }
+
+  // 統合済みの旧表記は正式名へ読み替え、会社情報は取扱会社の台帳の値にする（2026-10-22）。
+  // 確認画面で読み替え済みの行が届くが、直接呼ばれた場合に備えてここでも通す（同じ結果になる）。
+  try {
+    approvedItems = await withAgencyMaster(approvedItems);
+  } catch (error) {
+    return reportError("importProperties", error, "取扱会社の台帳を読めなかったため、取込を中止しました。");
   }
 
   // 取込データを先に検証する。1件でも壊れていれば、1件も書き込まない。
@@ -872,6 +883,24 @@ export async function getPropertyForAdmin(id: number) {
 type PropertyFormData = Record<string, string | number | Date | null>;
 
 /**
+ * 管理画面で入れた会社名を、取込と同じく取扱会社の台帳でそろえる（2026-10-22）。
+ * 旧表記は正式名へ読み替え、台帳に会社情報があればその値にする（空欄の項目は入力のまま）。
+ */
+async function withAgencyMasterForForm(data: PropertyFormData): Promise<PropertyFormData> {
+  const text = (key: string) => (typeof data[key] === "string" ? (data[key] as string) : null);
+  if (text("agencyName") === null) return data;
+  const [agency] = await withAgencyMaster([
+    {
+      agencyName: text("agencyName"),
+      agencyAddress: text("agencyAddress"),
+      agencyTel: text("agencyTel"),
+      agencyLicense: text("agencyLicense"),
+    },
+  ]);
+  return { ...data, ...agency };
+}
+
+/**
  * 管理画面の物件フォームを読み、保存できる形に検証する（新規登録と更新で共用。D-09）。
  *
  * 編集できる項目は src/config/propertyFields.ts の定義がすべて。
@@ -982,7 +1011,7 @@ export async function updateProperty(id: number, formData: FormData) {
   if (!form.ok) return { success: false as const, error: form.error };
 
   try {
-    await prisma.property.update({ where: { id }, data: form.data });
+    await prisma.property.update({ where: { id }, data: await withAgencyMasterForForm(form.data) });
     revalidatePropertyPages(id);
     return { success: true as const };
   } catch (error) {
@@ -1024,7 +1053,12 @@ export async function createProperty(formData: FormData) {
 
   const form = readPropertyForm(formData);
   if (!form.ok) return { success: false as const, error: form.error };
-  const data = form.data;
+  let data: PropertyFormData;
+  try {
+    data = await withAgencyMasterForForm(form.data);
+  } catch (error) {
+    return reportError("createProperty", error, "取扱会社の台帳を読めなかったため、登録できませんでした。");
+  }
 
   for (const field of PROPERTY_FIELDS) {
     const mustFill = field.required || field.requiredOnCreate;

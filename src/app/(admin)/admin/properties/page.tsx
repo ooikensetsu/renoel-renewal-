@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useMemo, useId } from "react";
+import { useSearchParams } from "next/navigation";
 import { parseCsv, decodeCsvBuffer } from "@/lib/csv";
 import { buildPropertyCsv, normalizePropertyCsvRow, propertyCsvHeaderOf } from "@/lib/propertyCsv";
 import {
@@ -113,7 +114,12 @@ export default function PropertyManagement() {
 
   // 一覧の絞り込み。判定は src/lib/adminPropertyFilter.ts に集約している。
   const NO_FILTER: AdminPropertyFilter = { keyword: "", syubetu: "all", level: "all", agency: "all", top: "all" };
-  const [filter, setFilter] = useState<AdminPropertyFilter>(NO_FILTER);
+  // 取扱会社の画面（/admin/agencies）から ?agency=会社名 で来たら、その会社で絞り込んで開く
+  const searchParams = useSearchParams();
+  const [filter, setFilter] = useState<AdminPropertyFilter>(() => ({
+    ...NO_FILTER,
+    agency: searchParams.get("agency") || "all",
+  }));
   // 一括編集の対象。絞り込みを変えたら選択は解く（見えていない物件を書き換えないため）。
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   // ページ分け。ページや表示件数を変えたときも選択は解く（別ページの物件を書き換えないため）。
