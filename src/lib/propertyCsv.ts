@@ -9,6 +9,8 @@
  * - 列名は日本語。取込は日本語・英語（athome 取込用CSVの列名）のどちらも受ける
  * - 公開状態・物件種別は表示名で書き、取込で番号に戻す
  * - 番号の列は ="…" で書く。Excel で開いたときに先頭の0が落ちる・「9/6」が日付になるのを防ぐ
+ * - 取扱会社のFAX番号は台帳（Agency 表）から書き出すだけで、取込では読まない（2026-10-29）。
+ *   物件にFAXの欄は無く、台帳が正本のため。直すときは管理画面の「取扱会社」で直す
  *
  * DBに触らない純関数にして、テストで固定している（D-06）。
  */
@@ -18,12 +20,21 @@ import { DISCLOSURE_LEVEL, DISCLOSURE_LEVEL_LABEL, type DisclosureLevel } from "
 import { PROPERTY_TYPE_LABEL } from "../config/property.ts";
 import { BULK_UPSERT_COLUMNS } from "./propertyBulkUpsert.ts";
 import { isBlankMark } from "./blank.ts";
+import type { AgencyContact } from "./confirmationRequestXlsx.ts";
 
 /** level＝公開状態の表示名、type＝物件種別の表示名、date＝年月日、code＝Excelに崩させない番号 */
 type ColumnFormat = "level" | "type" | "date" | "code";
 
-/** 書き出す列と順番。先頭は取扱会社（会社ごとに確認するため）、次が公開状態。 */
-export const PROPERTY_CSV_COLUMNS: readonly { key: string; header: string; format?: ColumnFormat }[] = [
+/**
+ * 書き出す列と順番。先頭は取扱会社（会社ごとに確認するため）、次が公開状態。
+ * exportOnly の列は書き出すだけで、取込では読まない。
+ */
+export const PROPERTY_CSV_COLUMNS: readonly {
+  key: string;
+  header: string;
+  format?: ColumnFormat;
+  exportOnly?: boolean;
+}[] = [
   { key: "agencyName", header: "取扱会社" },
   { key: "disclosureLevel", header: "公開状態", format: "level" },
   { key: "listingCompanyNo", header: "掲載会社管理番号", format: "code" },
@@ -33,6 +44,7 @@ export const PROPERTY_CSV_COLUMNS: readonly { key: string; header: string; forma
   { key: "priceMan", header: "価格（万円）" },
   { key: "madori", header: "間取り" },
   { key: "agencyTel", header: "取扱会社電話番号", format: "code" },
+  { key: "agencyFax", header: "取扱会社FAX番号", format: "code", exportOnly: true },
   { key: "agencyAddress", header: "取扱会社所在地" },
   { key: "agencyLicense", header: "取扱会社免許番号" },
   { key: "objMngNo", header: "物件管理番号", format: "code" },
@@ -77,6 +89,9 @@ export const PROPERTY_CSV_COLUMNS: readonly { key: string; header: string; forma
   { key: "privateRoad", header: "私道負担" },
 ];
 
+/** 書き出すだけの列の列名。取込では捨てる。 */
+const EXPORT_ONLY_HEADERS = new Set(PROPERTY_CSV_COLUMNS.filter((c) => c.exportOnly).map((c) => c.header));
+
 /** 列名（日本語）→ 取込の項目名。変更箇所の表示にも使う。 */
 const KEY_OF_HEADER = new Map(PROPERTY_CSV_COLUMNS.map((c) => [c.header, c.key]));
 const HEADER_OF_KEY = new Map(PROPERTY_CSV_COLUMNS.map((c): [string, string] => [c.key, c.header]));
@@ -119,8 +134,12 @@ function csvCell(text: string): string {
 /**
  * 物件のCSV本文（BOM なし・改行 CRLF）。取扱会社→掲載会社管理番号の順に並べ、
  * 取扱会社が未登録の物件は最後にまとめる。
+ * @param contacts 会社名 → 台帳の電話・FAX（確認依頼書と同じ getAgencyContactMap の値）。FAX番号の列に使う
  */
-export function buildPropertyCsv(properties: readonly Record<string, unknown>[]): string {
+export function buildPropertyCsv(
+  properties: readonly Record<string, unknown>[],
+  contacts: ReadonlyMap<string, AgencyContact> = new Map()
+): string {
   const name = (p: Record<string, unknown>) => String(p.agencyName ?? "").trim();
   const sorted = [...properties].sort((a, b) => {
     const an = name(a);
@@ -132,9 +151,10 @@ export function buildPropertyCsv(properties: readonly Record<string, unknown>[])
     );
   });
   const header = PROPERTY_CSV_COLUMNS.map((c) => csvCell(c.header)).join(",");
-  const lines = sorted.map((p) =>
-    PROPERTY_CSV_COLUMNS.map((c) => csvCell(formatValue(p[c.key], c.format))).join(",")
-  );
+  const lines = sorted.map((p) => {
+    const withFax: Record<string, unknown> = { ...p, agencyFax: contacts.get(name(p))?.fax ?? null };
+    return PROPERTY_CSV_COLUMNS.map((c) => csvCell(formatValue(withFax[c.key], c.format))).join(",");
+  });
   return [header, ...lines].join("\r\n");
 }
 
@@ -152,6 +172,7 @@ function unwrapExcelText(value: string): string {
 export function normalizePropertyCsvRow(raw: Record<string, string>): Record<string, string> {
   const row: Record<string, string> = {};
   for (const [header, rawValue] of Object.entries(raw)) {
+    if (EXPORT_ONLY_HEADERS.has(header.trim())) continue;
     const key = KEY_OF_HEADER.get(header.trim()) ?? header.trim();
     const value = unwrapExcelText(rawValue.trim()).trim();
     if (key === "disclosureLevel") {

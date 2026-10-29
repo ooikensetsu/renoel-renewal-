@@ -317,7 +317,8 @@ export default function PropertyManagement() {
   // 公開状態などを直してこの画面の「一括入力 (CSV)」で戻すと上書きされる。列は src/lib/propertyCsv.ts。
   const handleExport = () => {
     // getProperties は全項目を返している（PropertyRow の型は一覧で使う列だけを書いている）
-    const csvContent = buildPropertyCsv(visibleProperties as unknown as Record<string, unknown>[]);
+    // FAX番号は物件に無いため、確認依頼書と同じ台帳の値を渡す（2026-10-29）
+    const csvContent = buildPropertyCsv(visibleProperties as unknown as Record<string, unknown>[], agencyContacts);
     const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
     const link = document.createElement("a");
     const now = new Date();

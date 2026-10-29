@@ -115,3 +115,19 @@ test("変更箇所：「-」「- / -」と空は同じ値として扱う（表�
   const incoming = { keyMoney: null, depositGuarantee: null, leaseTermRent: "" };
   assert.deepEqual(changedPropertyColumns(existing, incoming), []);
 });
+
+test("取扱会社のFAX番号は台帳の値を電話番号の右に書き出す（2026-10-29）", () => {
+  const contacts = new Map([["パル建設 加古川店", { tel: "079-000-0000", fax: "079-111-2222" }]]);
+  const csv = buildPropertyCsv([sample, { ...sample, agencyName: "台帳に無い会社" }], contacts);
+  const header = csv.split("\r\n")[0].split(",");
+  assert.equal(header.indexOf("取扱会社FAX番号"), header.indexOf("取扱会社電話番号") + 1);
+  const [pal, other] = parseCsv(csv);
+  assert.equal(pal["取扱会社FAX番号"], '="079-111-2222"');
+  assert.equal(other["取扱会社FAX番号"], "");
+});
+
+test("FAX番号の列は取込では読まない（台帳が正本）", () => {
+  const csv = "取扱会社,取扱会社FAX番号,掲載会社管理番号\r\nA社,079-111-2222,0123\r\n";
+  const [row] = parseCsv(csv).map(normalizePropertyCsvRow);
+  assert.deepEqual(row, { agencyName: "A社", listingCompanyNo: "0123" });
+});
