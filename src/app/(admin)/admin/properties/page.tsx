@@ -188,8 +188,9 @@ export default function PropertyManagement() {
   // 詳細から戻ったときに同じページを開く（2026-10-27）。保存は戻した値が画面に入ってから始める（既定値で上書きしないため）。
   // ref ではなく state にしている。開発時は effect が2回走り、ref だと戻す前に既定値を保存してしまう。
   // 取扱会社の画面から ?agency= で来たときは、その会社の1ページ目を優先する。
+  // ただし覚えている状態が同じ会社の絞り込みなら戻す（詳細からブラウザの「戻る」で ?agency= に戻ったとき）。
   const [isListStateRestored, setIsListStateRestored] = useState(false);
-  const isOpenedWithAgency = useRef(Boolean(searchParams.get("agency")));
+  const openedAgency = useRef(searchParams.get("agency"));
   useEffect(() => {
     if (!isListStateRestored) return;
     saveListState(PROPERTY_LIST_STATE_KEY, { filter, page, perPage });
@@ -199,7 +200,7 @@ export default function PropertyManagement() {
     // isLoading の初期値が true なので、ここで立て直さない
     void (async () => {
       const saved = parsePropertyListState(loadListState(PROPERTY_LIST_STATE_KEY));
-      if (saved && !isOpenedWithAgency.current) {
+      if (saved && (!openedAgency.current || saved.filter.agency === openedAgency.current)) {
         setFilter(saved.filter);
         setPage(saved.page);
         setPerPage(saved.perPage);
