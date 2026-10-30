@@ -58,6 +58,8 @@ export default async function AgencyDetailPage({ searchParams }: { searchParams:
         aliases={agency.aliases}
       />
       <AgencyProperties properties={agency.properties} />
+      {/* 下まで読んだあとにも戻れるように（2026-10-29） */}
+      {back}
     </div>
   );
 }
