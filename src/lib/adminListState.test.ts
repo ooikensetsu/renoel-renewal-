@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parsePropertyListState, parseUserListState } from "./adminListState.ts";
+import { parseAgencyListState, parsePropertyListState, parseUserListState } from "./adminListState.ts";
 
 const PROPERTY_STATE = {
   filter: { keyword: "佐久", syubetu: 2, level: "all", agency: "テスト不動産", top: "on", transaction: "exclusive" },
@@ -75,4 +75,17 @@ test("物件：取引態様を足す前（2026-10-27 より前）に保存した
   const restored = parsePropertyListState({ ...PROPERTY_STATE, filter: old });
   assert.equal(restored?.filter.transaction, "all");
   assert.equal(restored?.page, 6);
+});
+
+test("取扱会社：タブ・検索語・ページ・表示件数を戻す（2026-10-29）", () => {
+  const v = { filter: { tab: "variants", keyword: "ハウス" }, page: 4, perPage: 100 };
+  assert.deepEqual(parseAgencyListState(v), v);
+});
+
+test("取扱会社：タブや検索語が想定外なら戻さない", () => {
+  const base = { filter: { tab: "all", keyword: "" }, page: 4, perPage: 50 };
+  for (const patch of [{ tab: "deleted" }, { tab: undefined }, { keyword: 1 }]) {
+    assert.equal(parseAgencyListState({ ...base, filter: { ...base.filter, ...patch } }), null, JSON.stringify(patch));
+  }
+  assert.equal(parseAgencyListState({ ...base, page: 0 }), null);
 });

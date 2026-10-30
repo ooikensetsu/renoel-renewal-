@@ -10,6 +10,7 @@ import { TRANSACTION_CATEGORIES } from "../config/property.ts";
 
 export const PROPERTY_LIST_STATE_KEY = "admin:properties:list";
 export const USER_LIST_STATE_KEY = "admin:users:list";
+export const AGENCY_LIST_STATE_KEY = "admin:agencies:list";
 
 export type ListState<F> = { filter: F; page: number; perPage: number };
 
@@ -18,6 +19,11 @@ export type UserListFilter = {
   typeFilter: "all" | "FREE" | "STORE";
   statusFilter: "all" | "ACTIVE" | "SUSPENDED";
 };
+
+/** 取扱会社の一覧のタブ（2026-10-29）。すべて・表記ゆれ候補・会社情報が未登録 */
+export const AGENCY_LIST_TABS = ["all", "variants", "unregistered"] as const;
+export type AgencyListFilter = { tab: (typeof AGENCY_LIST_TABS)[number]; keyword: string };
+
 
 /** 保存した値を読む。読めない（プライベートウィンドウ等）・JSONでないときは null。 */
 export function loadListState(key: string): unknown {
@@ -89,4 +95,14 @@ export function parseUserListState(v: unknown): ListState<UserListFilter> | null
   if (f.typeFilter !== "all" && f.typeFilter !== "FREE" && f.typeFilter !== "STORE") return null;
   if (f.statusFilter !== "all" && f.statusFilter !== "ACTIVE" && f.statusFilter !== "SUSPENDED") return null;
   return { filter: { keyword: f.keyword, typeFilter: f.typeFilter, statusFilter: f.statusFilter }, ...paging };
+}
+
+export function parseAgencyListState(v: unknown): ListState<AgencyListFilter> | null {
+  if (!isRecord(v) || !isRecord(v.filter)) return null;
+  const paging = parsePaging(v);
+  if (!paging) return null;
+  const f = v.filter;
+  if (typeof f.keyword !== "string") return null;
+  if (!(AGENCY_LIST_TABS as readonly unknown[]).includes(f.tab)) return null;
+  return { filter: { tab: f.tab as AgencyListFilter["tab"], keyword: f.keyword }, ...paging };
 }

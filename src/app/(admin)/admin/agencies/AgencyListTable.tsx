@@ -1,22 +1,38 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { Search } from "lucide-react";
 import AdminPager from "@/components/AdminPager";
 import { paginate, ADMIN_DEFAULT_PER_PAGE } from "@/lib/pagination";
 import { compareAgencies } from "@/lib/agencyReading";
 import type { AgencyListRow } from "@/app/actions/agencies";
+import {
+  AGENCY_LIST_STATE_KEY,
+  loadListState,
+  parseAgencyListState,
+  saveListState,
+  type AgencyListFilter,
+} from "@/lib/adminListState";
 
-type Tab = "all" | "variants" | "unregistered";
+type Tab = AgencyListFilter["tab"];
+const subscribeNothing = () => () => {};
 const TAB_LABEL: Record<Tab, string> = { all: "すべて", variants: "表記ゆれ候補", unregistered: "会社情報が未登録" };
 
 /** 取扱会社の一覧。並びは確認依頼書と同じ50音順。 */
 export default function AgencyListTable({ rows }: { rows: AgencyListRow[] }) {
-  const [tab, setTab] = useState<Tab>("all");
-  const [keyword, setKeyword] = useState("");
-  const [page, setPage] = useState(1);
-  const [perPage, setPerPage] = useState(ADMIN_DEFAULT_PER_PAGE);
+  // 詳細から戻ったときに元のタブ・検索語・ページへ戻す（物件管理・会員管理と同じ・2026-10-29）。
+  // 保存した値を初期値として読む。サーバーでは読めず既定値になるため、表はブラウザーで描くまで出さない
+  // （出すとサーバーの描画とずれる）。
+  const [saved] = useState(() => parseAgencyListState(loadListState(AGENCY_LIST_STATE_KEY)));
+  const isInBrowser = useSyncExternalStore(subscribeNothing, () => true, () => false);
+  const [tab, setTab] = useState<Tab>(saved?.filter.tab ?? "all");
+  const [keyword, setKeyword] = useState(saved?.filter.keyword ?? "");
+  const [page, setPage] = useState(saved?.page ?? 1);
+  const [perPage, setPerPage] = useState(saved?.perPage ?? ADMIN_DEFAULT_PER_PAGE);
+  useEffect(() => {
+    saveListState(AGENCY_LIST_STATE_KEY, { filter: { tab, keyword }, page, perPage });
+  }, [tab, keyword, page, perPage]);
 
   const counts = useMemo(
     () => ({
@@ -39,6 +55,7 @@ export default function AgencyListTable({ rows }: { rows: AgencyListRow[] }) {
   const pager = paginate(visible.length, String(page), perPage);
   const pageRows = visible.slice(pager.start, pager.end);
 
+  if (!isInBrowser) return null;
   return (
     <div className="bg-white rounded-2xl border border-reno-line overflow-hidden">
       <div className="p-4 flex flex-wrap items-center gap-3 border-b border-reno-line">
