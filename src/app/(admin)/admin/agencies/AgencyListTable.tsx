@@ -116,6 +116,14 @@ export default function AgencyListTable({ rows }: { rows: AgencyListRow[] }) {
           </tbody>
         </table>
       </div>
+
+      {/* 表の下にもページ送り（物件管理と同じ・2026-10-29） */}
+      {visible.length > 0 && (
+        <div className="border-t border-reno-line">
+          <AdminPager pager={pager} total={visible.length} perPage={perPage} unit="社"
+            onPageChange={setPage} onPerPageChange={(n) => { setPerPage(n); setPage(1); }} />
+        </div>
+      )}
     </div>
   );
 }
