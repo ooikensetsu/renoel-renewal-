@@ -686,3 +686,17 @@ $ node --test
 **リリース結果**：`main`（c33d194）を `202610oono` へ push。Vercel は success。`/`・`/properties`・`/property/283` は200、管理画面は307（ログインへ転送）。本番の管理画面での操作は未確認。
 
 **戻し方**：Vercel の Instant Rollback で前のデプロイ（794eb4f）へ戻す。コードは revert コミットを push する。
+
+---
+
+## 2026-11-06 管理画面の操作履歴（cfc1ed8・モリシタ版 033a124 の移植）
+
+実行者：Claude（大野の指示・L3承認 2026-11-06）。記録範囲はモリシタ版と同じ（変更・出力・個人情報の閲覧・管理者のログイン。値は残さない・保持期間は未定）。
+
+**RENOEL 向けに変えた点**：状態の検証は RENOEL の isValidUserStatus／isValidInquiryStatus のまま（*_VALUES は持ち込まず表示名だけ追加）。会員の状態変更は退会済みを対象外にする判定を残した。
+
+**ローカル検品（開発DB・Playwright で実操作）**：`pnpm gate` は typecheck 0件・lint エラー0件・test 211件中210件合格（スキップ1件は既存）。ログイン・会員一覧・会員詳細・問い合わせ一覧・メール送信ログ・CSV出力・トップ掲載・会員の状態（有効→停止→有効）・問い合わせの対応状態がすべて記録された。存在しない会員の状態変更は「会員が見つかりません。」。管理画面に暗いテーマは無い。
+
+**リリース結果**：本番DB（uptrrs…）に `20261105010000_add_admin_audit_log` を適用（AdminAuditLog は RLS 有効を確認）→ `main` を `202610oono` へ push。本番の `/admin/audit-logs` に記録が出るかは大野のログインで確認待ち。
+
+**戻し方**：コードは Vercel の Instant Rollback（約1分）。表は `DROP TABLE "AdminAuditLog";`（操作履歴だけが消える・AIは実行しない）。
