@@ -291,7 +291,16 @@ export default function PropertyManagement() {
 
     setImportStatus("importing");
     setErrorMessage("");
-    const res = await importProperties(itemsToImport, expectedCount);
+    let res;
+    try {
+      res = await importProperties(itemsToImport, expectedCount);
+    } catch (err) {
+      // 送信そのものが失敗した場合。サーバーは処理に入っていないため、書き込みは1件も無い。
+      console.error("取込の送信に失敗:", err);
+      setErrorMessage(serverCallErrorMessage(err, itemsToImport.length));
+      setImportStatus("error");
+      return;
+    }
     if (!res.success) {
       setErrorMessage(res.error);
       setImportStatus("error");
