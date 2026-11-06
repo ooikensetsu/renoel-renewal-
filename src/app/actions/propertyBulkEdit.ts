@@ -6,6 +6,8 @@ import { requireAdmin, authErrorMessage } from "@/lib/auth";
 import { reportError } from "@/lib/errors";
 import { toJsonSafe } from "@/lib/json";
 import { planBulkDisclosure, checkFoundCount } from "@/lib/bulkDisclosure";
+import { recordAuditIn } from "@/lib/auditLog";
+import { DISCLOSURE_LEVEL_LABEL, type DisclosureLevel } from "@/config/security";
 
 /**
  * 公開レベルの一括変更（管理者のみ）。
@@ -52,6 +54,14 @@ export async function bulkUpdateDisclosureLevel(
       const updated = await tx.property.updateMany({
         where: { id: { in: plan.ids } },
         data: { disclosureLevel: plan.level },
+      });
+      await recordAuditIn(tx, auth, {
+        action: "PROPERTY_BULK_DISCLOSURE",
+        targetType: "PROPERTY",
+        targetIds: plan.ids,
+        count: updated.count,
+        fields: ["公開レベル"],
+        summary: `${DISCLOSURE_LEVEL_LABEL[plan.level as DisclosureLevel] ?? plan.level}へ`,
       });
       return { ok: true as const, count: updated.count, backupId: backup.id };
     });

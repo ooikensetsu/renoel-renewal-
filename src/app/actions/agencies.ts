@@ -7,6 +7,8 @@ import { requireAdmin, authErrorMessage } from "@/lib/auth";
 import { reportError } from "@/lib/errors";
 import { toJsonSafe } from "@/lib/json";
 import { agencySpellingWarnings, withAgencyMaster } from "@/lib/agencyMasterDb";
+import { recordAudit, recordAuditIn } from "@/lib/auditLog";
+import { changedFieldNames } from "@/lib/auditEntry";
 import {
   agencyColumnsToWrite,
   agencyNameOf,
@@ -190,6 +192,17 @@ export async function getAgencyDetail(name: string) {
 const FIELD_MAX = 200;
 const MEMO_MAX = 2000;
 
+/** 操作履歴に書く会社情報の項目名（画面の表示名と同じ） */
+const AGENCY_FIELD_LABEL: Record<string, string> = {
+  address: "所在地",
+  tel: "電話番号",
+  fax: "FAX番号",
+  license: "宅建業の免許番号",
+  contactName: "担当者名",
+  contactEmail: "担当者メール",
+  memo: "メモ",
+};
+
 /** 画面の入力を検証して保存する形にする。空欄は null。 */
 function readAgencyForm(
   input: AgencyForm
@@ -259,6 +272,7 @@ export async function saveAgency(name: string, input: AgencyForm, expectedCount:
           error: `書き換える物件が確認時の${expectedCount}件から${rows.length}件に変わったため、保存を中止しました。もう一度保存してください。`,
         };
       }
+      const agencyBefore = await tx.agency.findUnique({ where: { name: agencyName } });
       // 物件を書き換えない保存でも控えを取る（会社情報だけを前の状態へ戻せるように）
       const backup = await tx.propertyImportBackup.create({
         data: {
@@ -269,7 +283,7 @@ export async function saveAgency(name: string, input: AgencyForm, expectedCount:
             agencyName,
             written: write,
             rows,
-            agencyBefore: await tx.agency.findUnique({ where: { name: agencyName } }),
+            agencyBefore,
           }) as object,
         },
       });
@@ -280,6 +294,14 @@ export async function saveAgency(name: string, input: AgencyForm, expectedCount:
         where: { name: agencyName },
         create: { name: agencyName, ...form.data },
         update: form.data,
+      });
+      await recordAuditIn(tx, auth, {
+        action: "AGENCY_SAVE",
+        targetType: "AGENCY",
+        targetIds: [agencyName],
+        fields: changedFieldNames(agencyBefore ?? {}, form.data, (k) => AGENCY_FIELD_LABEL[k] ?? k),
+        count: rows.length,
+        summary: agencyBefore ? `物件${rows.length}件へ反映` : `新規作成・物件${rows.length}件へ反映`,
       });
       return { ok: true as const, count: rows.length, backupId: backup.id };
     });
@@ -407,6 +429,14 @@ export async function mergeAgencies(target: string, sources: string[], expectedC
         where: { id: { in: plan.propertyIds } },
         data: { agencyName: input.target, ...(targetAgency ? agencyColumnsToWrite(targetAgency) : {}) },
       });
+      // 対象は統合先を先頭に、続けて統合元（会社名は個人情報ではない）
+      await recordAuditIn(tx, auth, {
+        action: "AGENCY_MERGE",
+        targetType: "AGENCY",
+        targetIds: [input.target, ...input.sources],
+        count: plan.propertyIds.length,
+        summary: `${input.sources.length}社を統合・物件${plan.propertyIds.length}件`,
+      });
       return { ok: true as const, count: plan.propertyIds.length, backupId: backup.id };
     });
     if (!outcome.ok) return { success: false as const, error: outcome.error };
@@ -457,7 +487,10 @@ export async function deleteAgencyAlias(alias: string) {
   if (name === null) return { success: false as const, error: "旧表記がありません。" };
 
   try {
-    await prisma.agencyAlias.deleteMany({ where: { alias: name } });
+    const removed = await prisma.agencyAlias.deleteMany({ where: { alias: name } });
+    if (removed.count > 0) {
+      await recordAudit(auth, { action: "AGENCY_ALIAS_DELETE", targetType: "AGENCY", targetIds: [name] });
+    }
     revalidateAgencyPages();
     return { success: true as const };
   } catch (error) {

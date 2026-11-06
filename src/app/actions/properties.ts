@@ -19,6 +19,8 @@ import { importKey, planImportMatches } from "@/lib/importMatch";
 import { PROPERTY_FIELDS } from "@/config/propertyFields";
 import { changedPropertyColumns } from "@/lib/propertyCsv";
 import { agencySpellingWarnings, withAgencyMaster } from "@/lib/agencyMasterDb";
+import { recordAudit } from "@/lib/auditLog";
+import { auditData, changedFieldNames } from "@/lib/auditEntry";
 import {
   PREF_CODE,
   DEFAULT_CITY_CODE,
@@ -468,6 +470,12 @@ export async function setShowOnTop(id: number, showOnTop: boolean) {
   }
   try {
     await prisma.property.update({ where: { id }, data: { showOnTop } });
+    await recordAudit(auth, {
+      action: "PROPERTY_SHOW_ON_TOP",
+      targetType: "PROPERTY",
+      targetIds: [id],
+      summary: showOnTop ? "掲載する" : "掲載しない",
+    });
     revalidatePath("/");
     revalidatePath("/admin/properties");
     return { success: true as const };
@@ -819,6 +827,16 @@ export async function importProperties(
       }),
       // 値は全て引数として渡す（SQL文に入力は混ざらない）。
       ...writes,
+      // 操作履歴も同じトランザクションで書く（2026-11-05）。新規の行はまだIDが無いので、上書きした物件IDだけ残す。
+      prisma.adminAuditLog.create({
+        data: auditData(auth, {
+          action: "PROPERTY_IMPORT",
+          targetType: "PROPERTY",
+          targetIds: updateIds,
+          count: rows.length,
+          summary: `新規${insertRows.length}・上書き${updateRows.length}`,
+        }),
+      }),
     ]);
     const result = { backupId: backup.id, overwritten: before.length };
 
@@ -997,6 +1015,17 @@ function readPropertyForm(
   return { ok: true, data };
 }
 
+/** 操作履歴に書く項目名。フォームの表示名と同じにする（無い列はそのまま）。 */
+const PROPERTY_EXTRA_LABELS: Record<string, string> = {
+  cityCd: "エリア",
+  prefCd: "都道府県",
+  syubetu: "物件種別",
+  disclosureLevel: "公開レベル",
+};
+function propertyFieldLabel(key: string): string {
+  return PROPERTY_FIELDS.find((f) => f.key === key)?.label ?? PROPERTY_EXTRA_LABELS[key] ?? key;
+}
+
 /** 物件を保存した後に、一覧・詳細の表示を作り直す。 */
 function revalidatePropertyPages(id: number) {
   revalidatePath("/admin/properties");
@@ -1025,7 +1054,19 @@ export async function updateProperty(id: number, formData: FormData) {
   if (!form.ok) return { success: false as const, error: form.error };
 
   try {
-    await prisma.property.update({ where: { id }, data: await withAgencyMasterForForm(form.data) });
+    const data = await withAgencyMasterForForm(form.data);
+    // 操作履歴に「変わった項目の名前」を残すため、保存する列の変更前の値を読む（値は履歴に残さない）
+    const before = await prisma.property.findUnique({
+      where: { id },
+      select: Object.fromEntries(Object.keys(data).map((k) => [k, true])),
+    });
+    await prisma.property.update({ where: { id }, data });
+    await recordAudit(auth, {
+      action: "PROPERTY_UPDATE",
+      targetType: "PROPERTY",
+      targetIds: [id],
+      fields: changedFieldNames((before ?? {}) as Record<string, unknown>, data, propertyFieldLabel),
+    });
     revalidatePropertyPages(id);
     return { success: true as const };
   } catch (error) {
@@ -1128,6 +1169,7 @@ export async function createProperty(formData: FormData) {
       },
       select: { id: true },
     });
+    await recordAudit(auth, { action: "PROPERTY_CREATE", targetType: "PROPERTY", targetIds: [created.id] });
     revalidatePropertyPages(created.id);
     return { success: true as const, id: created.id };
   } catch (error) {

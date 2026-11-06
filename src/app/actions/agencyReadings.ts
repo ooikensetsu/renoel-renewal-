@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import prisma from "@/lib/prisma";
 import { requireAdmin, authErrorMessage } from "@/lib/auth";
 import { reportError } from "@/lib/errors";
+import { recordAudit } from "@/lib/auditLog";
 import { isBlankMark } from "@/lib/blank";
 import { isValidReading, normalizeReading } from "@/lib/agencyReading";
 
@@ -97,6 +98,13 @@ export async function saveAgencyReading(agencyName: string, reading: string) {
         update: { reading: normalized, estimated: false },
       });
     }
+    await recordAudit(auth, {
+      action: "AGENCY_READING_SAVE",
+      targetType: "AGENCY",
+      targetIds: [name],
+      fields: ["読み"],
+      summary: normalized === "" ? "読みを消去" : undefined,
+    });
     revalidatePath("/admin/agency-readings");
     return { success: true as const, data: { reading: normalized || null } };
   } catch (error) {

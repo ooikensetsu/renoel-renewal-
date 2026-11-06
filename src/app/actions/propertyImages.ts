@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import prisma from "@/lib/prisma";
 import { requireAdmin, authErrorMessage } from "@/lib/auth";
 import { reportError } from "@/lib/errors";
+import { recordAudit } from "@/lib/auditLog";
 import { parseImageFileName, storagePathFor } from "@/lib/imageName";
 import {
   uploadImage,
@@ -101,6 +102,8 @@ export async function uploadImagesByFileName(formData: FormData): Promise<
 
   try {
     const results: ImageUploadResult[] = [];
+    // 操作履歴用：画像を登録できた物件
+    const savedPropertyIds = new Set<number>();
 
     for (const file of files) {
       const sizeError = checkFile(file);
@@ -142,6 +145,7 @@ export async function uploadImagesByFileName(formData: FormData): Promise<
 
       // 保存先のフォルダ名は従来どおり物件管理番号（Storage 内部の置き場で、画面には出ない）。
       const saved = await saveOne(property.id, property.objMngNo.toString(), parsed.order, parsed.ext, file);
+      if (saved.ok) savedPropertyIds.add(property.id);
       results.push({
         fileName: file.name,
         ok: saved.ok,
@@ -149,6 +153,16 @@ export async function uploadImagesByFileName(formData: FormData): Promise<
       });
     }
 
+    const savedCount = results.filter((r) => r.ok).length;
+    if (savedCount > 0) {
+      await recordAudit(auth, {
+        action: "IMAGE_UPLOAD",
+        targetType: "PROPERTY",
+        targetIds: [...savedPropertyIds],
+        count: savedCount,
+        summary: `ファイル名で一括・登録${savedCount}・失敗${results.length - savedCount}`,
+      });
+    }
     revalidatePath("/admin/properties");
     revalidatePath("/properties");
     return { success: true, results };
@@ -223,6 +237,16 @@ export async function uploadImagesForProperty(
     revalidatePath(`/admin/properties/${propertyId}`);
     revalidatePath("/properties");
     revalidatePath(`/property/${propertyId}`);
+    const savedCount = results.filter((r) => r.ok).length;
+    if (savedCount > 0) {
+      await recordAudit(auth, {
+        action: "IMAGE_UPLOAD",
+        targetType: "PROPERTY",
+        targetIds: [propertyId],
+        count: savedCount,
+        summary: `登録${savedCount}・失敗${results.length - savedCount}`,
+      });
+    }
     return { success: true, results };
   } catch (error) {
     const r = reportError("uploadImagesForProperty", error, "画像を登録できませんでした。");
@@ -251,6 +275,12 @@ export async function deletePropertyImage(imageId: number) {
     revalidatePath(`/admin/properties/${image.propertyId}`);
     revalidatePath("/properties");
     revalidatePath(`/property/${image.propertyId}`);
+    await recordAudit(auth, {
+      action: "IMAGE_DELETE",
+      targetType: "PROPERTY",
+      targetIds: [image.propertyId],
+      summary: `画像ID ${image.id}`,
+    });
     return { success: true as const };
   } catch (error) {
     return reportError("deletePropertyImage", error, "画像を削除できませんでした。");

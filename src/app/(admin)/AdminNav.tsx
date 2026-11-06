@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
 import {
   LayoutDashboard, Users, Building2, MessageSquare, MailWarning,
-  ExternalLink, LogOut, Briefcase,
+  ExternalLink, LogOut, Briefcase, History,
 } from "lucide-react";
 
 /**
@@ -24,6 +24,7 @@ const ITEMS = [
   { href: "/admin/agencies", label: "取扱会社", icon: Briefcase, also: ["/admin/agency-readings"] },
   { href: "/admin/inquiries", label: "お問い合わせ管理", icon: MessageSquare },
   { href: "/admin/mail-logs", label: "メール送信ログ", icon: MailWarning },
+  { href: "/admin/audit-logs", label: "操作履歴", icon: History },
 ];
 
 export default function AdminNav({ unreadInquiries }: { unreadInquiries: number }) {

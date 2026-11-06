@@ -8,6 +8,7 @@ import { toJsonSafe } from "@/lib/json";
 import { checkFoundCount } from "@/lib/bulkDisclosure";
 import { planConfirmationRecord } from "@/lib/propertyConfirmation";
 import { DISCLOSURE_LEVEL } from "@/config/security";
+import { recordAuditIn } from "@/lib/auditLog";
 
 /**
  * 物件確認の状況を記録する（管理者のみ・2026-10-27）。物件の詳細画面（1件）と一覧の一括記録の両方がここを呼ぶ。
@@ -66,6 +67,15 @@ export async function recordPropertyConfirmation(
           data: { disclosureLevel: DISCLOSURE_LEVEL.HIDDEN },
         });
       }
+      // 状況は決まった5語（有・商談・保留・中止・済）なので summary に入れてよい。備考は残さない。
+      await recordAuditIn(tx, auth, {
+        action: "PROPERTY_CONFIRMATION",
+        targetType: "PROPERTY",
+        targetIds: plan.ids,
+        count: plan.ids.length,
+        fields: toHide.length > 0 ? ["物件確認の状況", "公開レベル"] : ["物件確認の状況"],
+        summary: toHide.length > 0 ? `${plan.status}（${toHide.length}件を非表示へ）` : plan.status,
+      });
       return { ok: true as const, count: plan.ids.length, hiddenCount: toHide.length, backupId };
     });
 

@@ -5,8 +5,9 @@ import prisma from "@/lib/prisma";
 import { requireAdmin, requireUser, authErrorMessage } from "@/lib/auth";
 import { reportError } from "@/lib/errors";
 import { sendInquiryEmail, sendInquiryAdminNotice } from "@/lib/mail";
-import { RATE_LIMITS, isValidInquiryStatus } from "@/config/security";
+import { RATE_LIMITS, INQUIRY_STATUS_LABEL, isValidInquiryStatus } from "@/config/security";
 import { checkRateLimit, clientIp, hashForKey } from "@/lib/rateLimit";
+import { recordAudit } from "@/lib/auditLog";
 // S-08：長さの上限と形式の判定は config/inputLimits.ts に集約している（D-19）。
 import { INPUT_LIMITS, isValidEmail, withinLimit } from "@/config/inputLimits";
 
@@ -144,6 +145,8 @@ export async function getInquiries() {
             select: { id: true, objMngNo: true, title: true },
           });
     const byId = new Map(properties.map((p) => [p.id, p]));
+    // 個人情報の閲覧を残す（2026-11-05）。一覧なので件数だけ。
+    await recordAudit(auth, { action: "VIEW_INQUIRIES", targetType: "INQUIRY", count: inquiries.length });
 
     return {
       success: true as const,
@@ -183,10 +186,21 @@ export async function updateInquiryStatus(id: number, status: string) {
       dataToUpdate.repliedAt = null;
     }
 
+    const prev = await prisma.inquiry.findUnique({ where: { id }, select: { status: true } });
     const updatedInquiry = await prisma.inquiry.update({
       where: { id },
       data: dataToUpdate,
     });
+    if (prev?.status !== status) {
+      // 対応状態は決まった語（isValidInquiryStatus で検証済み）
+      await recordAudit(auth, {
+        action: "INQUIRY_STATUS",
+        targetType: "INQUIRY",
+        targetIds: [id],
+        fields: ["対応状態"],
+        summary: `${INQUIRY_STATUS_LABEL[prev?.status ?? ""] ?? "不明"}→${INQUIRY_STATUS_LABEL[status]}`,
+      });
+    }
     revalidatePath("/admin/inquiries");
     return { success: true as const, data: updatedInquiry };
   } catch (error) {
