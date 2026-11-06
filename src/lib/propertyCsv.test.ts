@@ -126,6 +126,21 @@ test("取扱会社のFAX番号は台帳の値を電話番号の右に書き出�
   assert.equal(other["取扱会社FAX番号"], "");
 });
 
+test("取扱会社の読みは登録済みの値を3列目に書き出す（2026-11-02）", () => {
+  const readings = new Map([["パル建設 加古川店", "ぱるけんせつ かこがわてん"]]);
+  const csv = buildPropertyCsv([sample, { ...sample, agencyName: "読みの無い会社" }], new Map(), readings);
+  assert.equal(csv.split("\r\n")[0].split(",")[2], "取扱会社の読み");
+  const [pal, other] = parseCsv(csv);
+  assert.equal(pal["取扱会社の読み"], "ぱるけんせつ かこがわてん");
+  assert.equal(other["取扱会社の読み"], "");
+});
+
+test("読みの列は取込では読まない（AgencyReading 表が正本）", () => {
+  const csv = "取扱会社,取扱会社の読み,掲載会社管理番号\r\nA社,えーしゃ,0123\r\n";
+  const [row] = parseCsv(csv).map(normalizePropertyCsvRow);
+  assert.deepEqual(row, { agencyName: "A社", listingCompanyNo: "0123" });
+});
+
 test("FAX番号の列は取込では読まない（台帳が正本）", () => {
   const csv = "取扱会社,取扱会社FAX番号,掲載会社管理番号\r\nA社,079-111-2222,0123\r\n";
   const [row] = parseCsv(csv).map(normalizePropertyCsvRow);

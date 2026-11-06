@@ -11,6 +11,8 @@
  * - 番号の列は ="…" で書く。Excel で開いたときに先頭の0が落ちる・「9/6」が日付になるのを防ぐ
  * - 取扱会社のFAX番号は台帳（Agency 表）から書き出すだけで、取込では読まない（2026-10-29）。
  *   物件にFAXの欄は無く、台帳が正本のため。直すときは管理画面の「取扱会社」で直す
+ * - 取扱会社の読みも AgencyReading 表から書き出すだけで、取込では読まない（2026-11-02）。
+ *   直すときは管理画面の「取扱会社」の読みの登録で直す
  *
  * DBに触らない純関数にして、テストで固定している（D-06）。
  */
@@ -37,6 +39,7 @@ export const PROPERTY_CSV_COLUMNS: readonly {
 }[] = [
   { key: "agencyName", header: "取扱会社" },
   { key: "disclosureLevel", header: "公開状態", format: "level" },
+  { key: "agencyReading", header: "取扱会社の読み", exportOnly: true },
   { key: "listingCompanyNo", header: "掲載会社管理番号", format: "code" },
   { key: "syubetu", header: "物件種別", format: "type" },
   { key: "title", header: "物件名" },
@@ -135,10 +138,12 @@ function csvCell(text: string): string {
  * 物件のCSV本文（BOM なし・改行 CRLF）。取扱会社→掲載会社管理番号の順に並べ、
  * 取扱会社が未登録の物件は最後にまとめる。
  * @param contacts 会社名 → 台帳の電話・FAX（確認依頼書と同じ getAgencyContactMap の値）。FAX番号の列に使う
+ * @param readings 会社名 → 読み（確認依頼書と同じ getAgencyReadingMap の値）。取扱会社の読みの列に使う
  */
 export function buildPropertyCsv(
   properties: readonly Record<string, unknown>[],
-  contacts: ReadonlyMap<string, AgencyContact> = new Map()
+  contacts: ReadonlyMap<string, AgencyContact> = new Map(),
+  readings: ReadonlyMap<string, string> = new Map()
 ): string {
   const name = (p: Record<string, unknown>) => String(p.agencyName ?? "").trim();
   const sorted = [...properties].sort((a, b) => {
@@ -152,8 +157,12 @@ export function buildPropertyCsv(
   });
   const header = PROPERTY_CSV_COLUMNS.map((c) => csvCell(c.header)).join(",");
   const lines = sorted.map((p) => {
-    const withFax: Record<string, unknown> = { ...p, agencyFax: contacts.get(name(p))?.fax ?? null };
-    return PROPERTY_CSV_COLUMNS.map((c) => csvCell(formatValue(withFax[c.key], c.format))).join(",");
+    const withAgencyInfo: Record<string, unknown> = {
+      ...p,
+      agencyFax: contacts.get(name(p))?.fax ?? null,
+      agencyReading: readings.get(name(p)) ?? null,
+    };
+    return PROPERTY_CSV_COLUMNS.map((c) => csvCell(formatValue(withAgencyInfo[c.key], c.format))).join(",");
   });
   return [header, ...lines].join("\r\n");
 }
