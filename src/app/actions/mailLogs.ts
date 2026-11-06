@@ -4,6 +4,7 @@ import prisma from "@/lib/prisma";
 import { requireAdmin, authErrorMessage } from "@/lib/auth";
 import { reportError } from "@/lib/errors";
 import { MAIL_STATUS } from "@/lib/mail";
+import { recordAudit } from "@/lib/auditLog";
 
 /** 一覧に出す件数の上限。全件を読み込んで管理画面が重くなるのを避ける。 */
 const LIST_LIMIT = 200;
@@ -26,6 +27,8 @@ export async function getMailLogs() {
       }),
       prisma.mailLog.count({ where: { status: MAIL_STATUS.FAILED } }),
     ]);
+    // 宛先メールアドレスを含むため、閲覧を残す（2026-11-05）
+    await recordAudit(auth, { action: "VIEW_MAIL_LOGS", count: logs.length });
     return { success: true as const, data: { logs, failedCount } };
   } catch (error) {
     return reportError("getMailLogs", error, "メール送信ログを取得できませんでした。");

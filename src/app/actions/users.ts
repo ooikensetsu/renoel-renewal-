@@ -5,10 +5,11 @@ import prisma from "@/lib/prisma";
 import { requireAdmin, requireUser, authErrorMessage } from "@/lib/auth";
 import { reportError } from "@/lib/errors";
 import bcrypt from "bcryptjs";
-import { isValidUserStatus, ROLE, USER_STATUS, BCRYPT_ROUNDS } from "@/config/security";
+import { isValidUserStatus, ROLE, USER_STATUS, USER_STATUS_LABEL, BCRYPT_ROUNDS } from "@/config/security";
 // S-08：長さの上限は config/inputLimits.ts に集約している（D-19）。
 import { INPUT_LIMITS, withinLimit } from "@/config/inputLimits";
 import { parseMemberInput, NEW_MEMBER_TYPE } from "@/lib/memberInput";
+import { recordAudit } from "@/lib/auditLog";
 
 /**
  * S-07：ここにある関数は "use server"、つまり公開されたHTTPエンドポイントである。
@@ -51,6 +52,8 @@ export async function getUsers() {
       orderBy: { createdAt: "desc" },
       select: USER_FIELDS,
     });
+    // 個人情報の閲覧を残す（2026-11-05）。誰の情報を見たかは一覧なので件数だけ。
+    await recordAudit(auth, { action: "VIEW_USER_LIST", targetType: "USER", count: users.length });
     return { success: true, data: users };
   } catch (error) {
     // D-07：例外の中身をそのまま返さない。ログにだけ残す。
@@ -76,6 +79,7 @@ export async function getUserById(id: number) {
     if (!user) {
       return { success: false as const, error: "会員が見つかりません。" };
     }
+    await recordAudit(auth, { action: "VIEW_USER", targetType: "USER", targetIds: [id] });
     return { success: true as const, data: user };
   } catch (error) {
     return reportError("getUserById", error, "会員データを取得できませんでした。");
@@ -95,12 +99,12 @@ export async function updateUserStatus(id: number, status: string) {
   }
 
   try {
-    // S-13：退会済み（deletedAt あり）の会員は対象にしない。
-    const target = await prisma.user.findFirst({
+    // S-13：退会済み（deletedAt あり）の会員は対象にしない。変更前の状態は操作履歴に使う
+    const prev = await prisma.user.findFirst({
       where: { id, deletedAt: null },
-      select: { id: true },
+      select: { id: true, status: true },
     });
-    if (!target) {
+    if (!prev) {
       return { success: false as const, error: "会員が見つかりません。" };
     }
 
@@ -112,6 +116,16 @@ export async function updateUserStatus(id: number, status: string) {
         activityLogs: { orderBy: { createdAt: "desc" }, take: 20 },
       },
     });
+    if (prev?.status !== status) {
+      // 状態は決まった語（isValidUserStatus で検証済み）なので summary に入れてよい
+      await recordAudit(auth, {
+        action: "USER_STATUS",
+        targetType: "USER",
+        targetIds: [id],
+        fields: ["状態"],
+        summary: `${USER_STATUS_LABEL[prev?.status ?? ""] ?? "不明"}→${USER_STATUS_LABEL[status]}`,
+      });
+    }
     revalidatePath("/admin/users");
     return { success: true as const, data: user };
   } catch (error) {
@@ -164,6 +178,7 @@ export async function createUserByAdmin(formData: FormData) {
       },
       select: { id: true },
     });
+    await recordAudit(auth, { action: "USER_CREATE", targetType: "USER", targetIds: [created.id] });
     revalidatePath("/admin/users");
     return { success: true as const, id: created.id };
   } catch (error) {
@@ -203,6 +218,7 @@ export async function deleteUser(id: number) {
       where: { id },
       data: { deletedAt: new Date(), deletedBy: auth.email },
     });
+    await recordAudit(auth, { action: "USER_DELETE", targetType: "USER", targetIds: [id] });
     revalidatePath("/admin/users");
     return { success: true as const };
   } catch (error) {

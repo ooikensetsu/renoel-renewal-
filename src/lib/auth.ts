@@ -13,6 +13,7 @@ import {
   RATE_LIMITS,
 } from "@/config/security";
 import { checkRateLimit, clearRateLimit, clientIp } from "@/lib/rateLimit";
+import { recordAudit } from "@/lib/auditLog";
 
 /**
  * S-12：メールアドレスの登録有無を「応答時間の差」で推測されないための当て馬。
@@ -174,6 +175,11 @@ export const authOptions: NextAuthOptions = {
               details: "ログインしました",
             },
           });
+          // 管理者のログインは管理画面の操作履歴にも残す（2026-11-05）
+          const role = (message.user as { role?: string }).role;
+          if (role === ROLE.ADMIN && message.user.email) {
+            await recordAudit({ userId, email: message.user.email }, { action: "ADMIN_LOGIN" });
+          }
         }
       } catch (e) {
         console.error("Failed to log activity:", e);

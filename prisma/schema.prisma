@@ -233,6 +233,34 @@ model ActivityLog {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
+/// 管理画面の操作履歴（2026-11-05 大野の指示）。誰が・いつ・何を・どの対象に行ったかを残す。
+/// 値そのものは残さない（大野の決定）。fields は変更した項目の名前、summary は決まった語だけ
+/// （公開レベル名・状態名など。画面から受け取った文字列は入れない）。個人情報を複製しないため。
+/// 実行者の会員を消しても履歴が消えないよう、User へのリレーションは張らない。保持期間は未定（自動削除なし）。
+model AdminAuditLog {
+  id         Int      @id @default(autoincrement())
+  createdAt  DateTime @default(now())
+  actorId    Int
+  /// 実行時点の管理者メールアドレス（PropertyConfirmation.recordedBy と同じ扱い）
+  actorEmail String
+  /// 操作の種類（英字コード。表示名は src/config/auditLog.ts）
+  action     String
+  /// 対象の種類（PROPERTY / USER / INQUIRY / AGENCY / IMAGE など）
+  targetType String?
+  /// 対象のID。取扱会社は会社名。一括操作は複数
+  targetIds  String[] @default([])
+  /// 変更した項目の名前（値は入れない）
+  fields     String[] @default([])
+  /// 件数（一括操作・出力・閲覧した件数）
+  count      Int?
+  /// 決まった語だけの補足（例：「非表示へ」「新規3・上書き5」）
+  summary    String?
+
+  @@index([createdAt])
+  @@index([action, createdAt])
+  @@index([actorId, createdAt])
+}
+
 model Inquiry {
   id         Int      @id @default(autoincrement())
   propertyId Int?     // どの物件についての問い合わせか（nullの場合は一般の問い合わせ）

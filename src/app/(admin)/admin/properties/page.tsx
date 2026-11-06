@@ -58,6 +58,7 @@ import {
   type DiffResult,
   type IncomingProperty,
 } from "@/app/actions/properties";
+import { recordAdminExport } from "@/app/actions/auditLogs";
 
 type PropertyRow = {
   id: number;
@@ -342,6 +343,10 @@ export default function PropertyManagement() {
     link.click();
     // すぐ解放するとブラウザによってはダウンロードが中断するため、少し待つ
     setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+    // 操作履歴に出力を残す（2026-11-05）。記録の失敗で出力は止めない
+    void recordAdminExport("EXPORT_PROPERTY_CSV", visibleProperties.length).catch((e) =>
+      console.error("出力の記録に失敗:", e)
+    );
   };
   // 掲載の確認を取扱会社へ依頼する書面（2026-10-15）。絞り込み中の物件を会社ごとにまとめ、
   // モリシタハウスの様式（物件確認依頼）に書き込んだ Excel を作る。様式と欄は src/lib/confirmationRequestXlsx.ts。
@@ -386,6 +391,11 @@ export default function PropertyManagement() {
     link.download = fileName;
     link.click();
     setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+    void recordAdminExport(
+      mode === "book" ? "EXPORT_CONFIRMATION_BOOK" : "EXPORT_CONFIRMATION_EACH",
+      groups.reduce((n, g) => n + g.properties.length, 0),
+      groups.length
+    ).catch((e) => console.error("出力の記録に失敗:", e));
     setErrorMessage("");
     setNotice(
       summary +

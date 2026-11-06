@@ -17,11 +17,23 @@ export const USER_STATUS = {
   SUSPENDED: "SUSPENDED",
 } as const;
 
+/** 会員の状態の表示名（操作履歴で使う。2026-11-05）。既存の画面はまだ各画面に直書きしている */
+export const USER_STATUS_LABEL: Record<string, string> = {
+  [USER_STATUS.ACTIVE]: "有効",
+  [USER_STATUS.SUSPENDED]: "停止",
+};
+
 /** 問い合わせの対応状況。Inquiry.status に入る値はこの2つだけ。 */
 export const INQUIRY_STATUS = {
   UNREAD: "UNREAD",
   REPLIED: "REPLIED",
 } as const;
+
+/** 問い合わせの対応状態の表示名（操作履歴で使う。2026-11-05）。既存の画面はまだ各画面に直書きしている */
+export const INQUIRY_STATUS_LABEL: Record<string, string> = {
+  [INQUIRY_STATUS.UNREAD]: "未対応",
+  [INQUIRY_STATUS.REPLIED]: "対応済",
+};
 
 /** S-12：この回数だけ連続で失敗したらアカウントを一時ロックする。 */
 export const MAX_FAILED_LOGIN_ATTEMPTS = 5;
